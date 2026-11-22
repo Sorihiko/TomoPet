@@ -1,0 +1,68 @@
+TomoPet（原名 osu-pet）里不是从零写的部分，以及它们的授权。下面三处上游代码都是 MIT，许可全文（含版权行）原样放在 licenses/：
+  licenses/surfcore-MIT.txt、licenses/surfpet-MIT.txt、licenses/crosspet-MIT.txt。打包版（npm run package）把 licenses/
+  一起带上，并收进包里的 THIRD-PARTY-NOTICES.txt。
+
+1. 照搬自 SurfCore（MIT）
+   Copyright (c) 2026 Derpyu520 and qq-bridge / QSH contributors
+   来源：https://github.com/Mieksido/surfcore　许可全文：licenses/surfcore-MIT.txt
+
+   core/events.js                 ← plugins/surfcore/lib/osu/events.js（2026-11-20 起多了一个 break-end 事件，其余原样）
+   core/watch.js                  ← plugins/surfcore/lib/osu/watch.js（闸门规则、提示词、小结；依赖换成本项目的）
+   core/tosu-counter.js           ← plugins/surfcore/lib/osu/tosu-counter.js
+   core/speakable.js              ← src/voice-tts.js 的 speakableText() / wavDurationMs()
+   core/tts-volc.js               ← 接口契约照 SurfCore 语音包 voxd/engine/cloud.py（MIT）
+   counter/pet/、counter/subtitle/ ← plugins/surfcore/lib/osu/tosu-counter/、tosu-counter-subtitle/
+   app/overlay/subtitle.html、app/overlay-window.js ← plugins/surfcore/lib/osu/overlay/
+   renderer/video-rig.js          ← plugins/surfcore/lib/pet-video/video-rig.js（原样）
+   test/events.test.mjs、watch.test.mjs、tosu-counter.test.mjs、fixtures.mjs
+                                  ← plugins/surfcore/scripts/test-osu-watch.mjs、test-osu-tosu-counter.mjs
+
+2. 来自 surfpet（桌宠 feiyu-pet，MIT）
+   Copyright (c) 2026 Derpyu520 and qq-bridge / QSH contributors
+   来源：https://github.com/Mieksido/surfpet　许可全文：licenses/surfpet-MIT.txt
+
+   renderer/rig.ts                ← src/renderer/rig.ts（分图层皮肤 rig: "layered" 的渲染器）。
+                                    最早从本机 feiyu-pet 0.2.3 安装包的 dist/renderer.js.map 还原；2026-11-20 和上游当前版本
+                                    （a996e66）核对过，代码逐字节相同（只有换行符不同）。改动：只加了文件头注释（来源和许可）。
+   renderer/pet-entry.ts 的鼠标交互（拖动、摸头、点一下）参照了上游的 src/renderer/index.ts。
+
+   2026-11-20 查清授权：surfpet 是公开仓库，和 SurfCore 同一作者，LICENSE 是标准 MIT（正文后面附的「第三方组件与合规边界」
+   自己声明不是许可证的一部分）。用户同意打包版带上 rig.ts（原来打包时用一个替身顶替，现在去掉了）。
+   注意：surfpet README 写明素材 / 字体各自遵循其许可，不在 MIT 里——小肥鱼 feiyu-01～05 的立绘仍然不能随本项目发布。
+
+2b. 改编自 CrossPet（MIT）
+   Copyright (c) 2026 lokicorvus and CrossPet contributors（https://github.com/lokicorvus/crosspet）
+   许可全文：licenses/crosspet-MIT.txt（只覆盖 CrossPet 的代码；立绘和设定是 CC BY-NC-SA 4.0，见下面）
+
+   renderer/sprite-rig.ts 里的动作关键帧（bob / hop / jump / quick / rock / shake / angry / dizzy / squish / jolt）
+   和「图片按高度占满、底边居中」「待机时叠一张眨眼帧 140 毫秒」的做法，改编自 CrossPet app/web/index.html。
+   core/crosspet-import.js 按 CrossPet 的姿势文件名挑图（不拷它的代码、台词或 character.json）。
+
+   CrossPet 的立绘和角色设定是 CC BY-NC-SA 4.0，**不在本仓库里**：放在程序文件夹的 art/crosspet/（.gitignore 挡住），
+   npm start / npm run build 时转成 skins-bundled/（也挡住），每套写一份 CREDITS.md。从仓库拿到代码的人要自己下载 CrossPet
+   放进 art/crosspet/。CrossPet 的授权只覆盖它有权授权的部分，社区既有设定（例如 B 站 ZipZipPipe 设计的角色）的权利以各自来源为准。
+
+2c. 张嘴口型取自 hunmer/aboutme-pets（CC BY-NC-SA 4.0）
+   https://github.com/hunmer/aboutme-pets（作者 hunmer），钉在提交 df864c0c7db75857854740b301f6677e50d0b29c。
+   scripts/mouths/make-mouths.py 从它的「碎碎念」动画（AI 生成）里截几帧的嘴，对齐、缩放、调色后做成只有嘴的叠加图，
+   说话时叠在 CrossPet 的待机图上（没有对应动画的角色用别的角色的嘴移植）。脚本和配置（scripts/mouths/）是本项目的代码（MIT）；
+   下载的动画和做出来的嘴图是 CC BY-NC-SA 4.0 的素材，**不在本仓库里**：在 art/hunmer/、art/mouths/（.gitignore 挡住），
+   打包皮肤时拷进 skins-bundled/，每套的 CREDITS.md 写明署名和改动。
+
+3. 第三方库（随 npm 安装，不在仓库里）
+   PixiJS（MIT，rig.ts 用它，打进 dist/ 的渲染层，打包版里也有）、esbuild（MIT，只在打包时用）、
+   Electron（MIT，打包版里带着，授权见包里的 LICENSE / LICENSES.chromium.html）、
+   @anthropic-ai/sdk（Apache-2.0，打包版里带着）和它依赖的几个包（MIT / Apache-2.0 / Unlicense 等）：
+   打包时把每个包的名字、版本、协议和授权全文写进包里的 THIRD-PARTY-NOTICES.txt。
+
+4. 素材
+   （仓库里没有皮肤；原来的占位小人 2026-11-20 删了。）
+   打包版（npm run package）里的 skins-bundled/：CrossPet 的立绘，CC BY-NC-SA 4.0，见上面 2b 和包里的「授权说明.txt」；
+                                  张嘴口型取自 hunmer/aboutme-pets，CC BY-NC-SA 4.0，见上面 2c。
+   assets/logo.png（如果有）       项目的 logo，不在 MIT 的范围里；图里有 osu! 的标志，"osu!" 是 ppy Pty Ltd 的商标。
+   用户自己的皮肤                  放在数据目录里，不属于这个仓库。feiyu-pet 的立绘、Claude 娘素材（Claude-Chan，
+                                  CC BY-NC-SA 4.0，人设原作 ZipZipPipe）都**不能**随本项目发布。
+
+5. 不属于本项目的东西
+   tosu（https://github.com/tosuapp/tosu）是第三方工具，本项目不包含、不分发它，只是往它的 static 文件夹里放两个网页。
+   osu! 是 ppy Pty Ltd 的游戏和商标；本项目是爱好者作品，与 ppy 无关。

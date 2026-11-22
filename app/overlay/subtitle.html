@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>字幕</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; media-src data:">
+<style>
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;user-select:none}
+#box{position:absolute;left:0;right:0;bottom:14%;text-align:center;opacity:0;transition:opacity .2s ease}
+#box.on{opacity:1}
+/* 视频字幕的样子：白字、黑描边，压在什么画面上都看得清；没有底框、没有头像。 */
+#line{display:inline-block;max-width:94%;font-family:"Microsoft YaHei UI","PingFang SC","Noto Sans SC",sans-serif;font-weight:700;font-size:30px;line-height:1.42;letter-spacing:.04em;color:#fff;
+  -webkit-text-stroke:5px rgba(0,0,0,.88);paint-order:stroke fill;
+  text-shadow:0 2px 6px rgba(0,0,0,.55);
+  word-break:break-word;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div id="box"><span id="line"></span></div>
+<audio id="voice"></audio>
+<script>
+// 和主进程之间走 preload（overlay/preload.cjs）给的 window.overlayHost，页面本身碰不到 Node。
+const host = window.overlayHost;
+const box = document.getElementById('box');
+const line = document.getElementById('line');
+const voice = document.getElementById('voice');
+let timer = null;
+let current = null;
+
+function finish(id) {
+  if (current !== id) return; // 这期间又来了新的一句：别把新的那句收掉
+  clearTimeout(timer);
+  box.classList.remove('on');
+  setTimeout(() => { if (current === id) { current = null; host.done(id); } }, 260);
+}
+
+host.onSay((message) => {
+  clearTimeout(timer);
+  try { voice.pause(); } catch {}
+  current = message.id;
+  line.style.fontSize = `${Math.round(30 * (Number(message.scale) || 1))}px`;
+  line.style.webkitTextStrokeWidth = `${Math.max(3, Math.round(5 * (Number(message.scale) || 1)))}px`;
+  // 「不显示字幕」：不出字，只放声音
+  line.textContent = message.hidden ? '' : message.text;
+  if (message.hidden) box.classList.remove('on');
+  else box.classList.add('on');
+  const id = message.id;
+  // 没有语音：按给的时长显示。有语音：念完再多留一小会儿；时长只当保险（音频坏了也要收掉）。
+  timer = setTimeout(() => finish(id), Math.max(1500, Number(message.ms) || 4000));
+  if (message.audio) {
+    voice.onended = () => setTimeout(() => finish(id), 450);
+    voice.onerror = () => {};
+    voice.src = `data:audio/wav;base64,${message.audio}`;
+    voice.play().catch(() => {});
+  }
+});
+</script>
+</body>
+</html>

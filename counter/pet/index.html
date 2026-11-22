@@ -1,0 +1,45 @@
+<!doctype html>
+<!-- 角色（tosu counter）：由 TomoPet（osu-pet）拷进 tosu 的 static 文件夹，别在 tosu 目录里手改（会被覆盖）。
+     源文件：osu-pet 的 counter/pet/。用法：OBS 加「浏览器」源，地址 http://127.0.0.1:24050/fatfish-osu/
+     页面照搬 SurfCore lib/osu/tosu-counter/index.html；渲染层换成 TomoPet 自己打包的 renderer.js（不再需要假的 window.pet）。 -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>TomoPet</title>
+    <style>
+      html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; }
+      canvas { display: block; }
+      #sub {
+        position: fixed; left: 0; right: 0; bottom: 4%; z-index: 10; padding: 0 12px;
+        text-align: center; color: #fff; font: 700 30px/1.35 "Microsoft YaHei", "PingFang SC", sans-serif;
+        -webkit-text-stroke: 5px rgba(0, 0, 0, .88); paint-order: stroke fill; text-shadow: 0 2px 6px rgba(0, 0, 0, .55);
+        opacity: 0; transition: opacity .2s ease; pointer-events: none; word-break: break-all;
+      }
+      #sub.on { opacity: 1; }
+      /* 气泡：在她左上方，右下角伸出尾巴斜指着头（位置由 counter.js 按她头的位置算）。
+         2026-11-19 用户画图：气泡应该在人左上角，不是正中间。 */
+      #bubble {
+        position: fixed; z-index: 11; width: max-content; max-width: var(--max-w, 86vw); box-sizing: border-box; padding: .55em .8em;
+        background: rgba(255, 255, 255, .96); color: #2b2f3a; border-radius: 18px; box-shadow: 0 4px 14px rgba(0, 0, 0, .28);
+        font: 600 30px/1.4 "Microsoft YaHei", "PingFang SC", sans-serif; word-break: break-all; text-align: left;
+        opacity: 0; transform: translate(6px, 6px) scale(.96); transform-origin: 100% 100%;
+        transition: opacity .18s ease, transform .18s ease; pointer-events: none;
+      }
+      #bubble.on { opacity: 1; transform: none; }
+      /* 尾巴：气泡右下角往右下斜的尖角 */
+      #bubble::after {
+        content: ""; position: absolute; right: var(--tail-right, 22px); bottom: -17px;
+        border-style: solid; border-width: 18px 0 0 22px; border-color: rgba(255, 255, 255, .96) transparent transparent transparent;
+        transform: skewX(-24deg); transform-origin: 0 0;
+      }
+      #err { position: fixed; left: 8px; top: 8px; z-index: 20; color: #fff; background: rgba(160, 40, 40, .85); font: 13px/1.5 sans-serif; padding: 6px 10px; border-radius: 6px; display: none; max-width: 90%; }
+    </style>
+  </head>
+  <body>
+    <div id="sub"></div>
+    <div id="bubble"></div>
+    <div id="err"></div>
+    <script src="./renderer.js"></script>
+    <script src="./counter.js"></script>
+  </body>
+</html>

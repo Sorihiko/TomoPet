@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+<title>TomoPet 设置</title>
+<link rel="stylesheet" href="./settings.css">
+</head>
+<body>
+<!-- 自己画的标题栏（窗口用 titleBarStyle: hidden，右上角三个按钮是系统的、叠在这一条右边）：整条可以拖动窗口。 -->
+<header class="titlebar"><span class="titlebar-name">TomoPet</span><span class="titlebar-sep">·</span><span>设置</span></header>
+<!--
+  设置窗口（2026-11-20 改版：用户选的「首页总览 + 分页」「深色、像游戏设置」）。
+  左边每一项是一页（#overview #watch #persona #llm #tts #pet #obs #advanced），一次只显示一页；
+  设置项照旧用 data-cfg / data-secret / data-call 接到 settings.js，存和读的逻辑没变。
+-->
+<aside id="nav">
+  <div class="brand">
+    <img id="logo" alt="" hidden>
+    <div class="brand-text">
+      <div class="brand-name">TomoPet</div>
+      <div class="brand-sub">看你打 osu!</div>
+    </div>
+  </div>
+
+  <label class="master" title="总开关：关掉她就不看、不说">
+    <span class="master-text">
+      <span class="master-title">看你打 osu!</span>
+      <span class="master-state" id="master-state">—</span>
+    </span>
+    <input type="checkbox" class="switch" data-cfg="watch.enabled">
+  </label>
+
+  <nav id="pages-nav">
+    <a href="#overview" data-page="overview"><svg viewBox="0 0 24 24"><path d="M4 13h6V4H4zm10 7h6v-9h-6zM4 20h6v-4H4zm10-16v4h6V4z"/></svg><span>总览</span><i class="badge" id="nav-badge" hidden></i></a>
+    <a href="#pet" data-page="pet"><svg viewBox="0 0 24 24"><path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/></svg><span>角色</span></a>
+    <a href="#watch" data-page="watch"><svg viewBox="0 0 24 24"><path d="M4 5h16v10H8l-4 4z"/></svg><span>说话</span></a>
+    <a href="#persona" data-page="persona"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span>人设</span></a>
+    <a href="#llm" data-page="llm"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="3"/><path d="M9 1v4M15 1v4M9 19v4M15 19v4M1 9h4M1 15h4M19 9h4M19 15h4"/></svg><span>模型</span></a>
+    <a href="#tts" data-page="tts"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg><span>语音</span></a>
+    <a href="#obs" data-page="obs"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/></svg><span>OBS</span></a>
+    <a href="#advanced" data-page="advanced"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span>高级</span></a>
+  </nav>
+</aside>
+
+<main>
+  <!-- ── 总览 ─────────────────────────────────────────────────────────── -->
+  <section class="page" data-page="overview" id="overview">
+    <!-- 总览（2026-11-20 用户：「把总览页也改得好看点」）：角色 + 她刚说的话、四块数据卡、下一步、最近几把、没说的原因。 -->
+    <div class="hero" id="status">
+      <div class="hero-glow"></div>
+      <div class="hero-art">
+        <img id="hero-img" alt="" hidden>
+        <div class="hero-initial" id="hero-initial">?</div>
+      </div>
+      <div class="hero-info">
+        <div class="hero-eyebrow">你的桌宠</div>
+        <div class="hero-name" id="hero-name">—</div>
+        <div class="hero-skin" id="hero-skin"></div>
+        <div class="bubble-say" id="last-bubble">
+          <div class="bubble-meta" id="st-last-meta">上一句</div>
+          <div class="bubble-text" id="st-last">…</div>
+        </div>
+        <div class="row">
+          <button class="primary" id="btn-test" data-call="watch.test">让她说一句试试</button>
+          <span class="hint">用一把假成绩走完整条链路，会花一次模型调用。</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tiles">
+      <div class="tile" id="tile-tosu">
+        <div class="tile-label">tosu</div>
+        <div class="tile-main" id="st-tosu">…</div>
+        <div class="tile-sub" id="st-tosu-url"></div>
+      </div>
+      <div class="tile tile-ring">
+        <div class="ring" id="st-today-bar"><span id="st-today-pct">0%</span></div>
+        <div>
+          <div class="tile-label">今天说了</div>
+          <div class="tile-main" id="st-today-count">0 / 0</div>
+          <div class="tile-sub">每天上限在「说话」页改</div>
+        </div>
+      </div>
+      <div class="tile">
+        <div class="tile-label">模型</div>
+        <div class="tile-main" id="st-llm-calls">0 次</div>
+        <div class="tile-sub" id="st-today">…</div>
+      </div>
+      <div class="tile tile-playing" id="tile-playing">
+        <div class="tile-label" id="st-playing-label">现在</div>
+        <div class="tile-main" id="st-playing">…</div>
+        <div class="tile-sub" id="st-playing-sub"></div>
+      </div>
+    </div>
+
+    <section id="steps-card" class="card" hidden>
+      <h2>下一步</h2>
+      <ul id="steps"></ul>
+    </section>
+
+    <div class="grid2 cols">
+      <section class="card">
+        <h2>最近几把 <a href="#advanced" class="more">全部</a></h2>
+        <ul id="plays-mini" class="plays-mini"></ul>
+      </section>
+      <section class="card">
+        <h2>最近没说的 <span class="sub">为什么那一下她没反应</span></h2>
+        <ul id="st-skipped" class="timeline"></ul>
+      </section>
+    </div>
+  </section>
+
+  <!-- ── 角色 ─────────────────────────────────────────────────────────── -->
+  <section class="page" data-page="pet" id="pet" hidden>
+    <!-- 角色页（2026-11-21 用户：「设计的好看点，像游戏选角色一样」）：上面展示台（大图轮着换姿势），下面选角格子
+         （鼠标移上去先在展示台预览，点一下就换上），最下面是桌面上的显示设置。 -->
+    <header class="page-head"><h1>角色</h1><p>选一个陪你打 osu! 的角色，桌面上和 OBS 里都是她。</p></header>
+    <section class="stage" id="char-stage">
+      <div class="stage-art">
+        <div class="stage-spot"></div>
+        <div class="stage-floor"></div>
+        <img class="stage-img" id="stage-img-a" alt="">
+        <img class="stage-img" id="stage-img-b" alt="">
+        <div class="stage-initial" id="stage-initial" hidden>?</div>
+      </div>
+      <div class="stage-info">
+        <div class="stage-eyebrow" id="stage-eyebrow">使用中</div>
+        <div class="stage-name" id="stage-name">—</div>
+        <div class="stage-outfit" id="stage-outfit"></div>
+        <div class="stage-poses" id="stage-poses"></div>
+      </div>
+    </section>
+    <section class="card roster-card">
+      <h2>选角色 <span class="sub" id="skin-count"></span></h2>
+      <div id="skin-grid" class="roster"></div>
+      <div class="row">
+        <button data-call="skin.import">导入皮肤…</button>
+        <button data-call="skins.open">打开皮肤文件夹</button>
+      </div>
+      <p class="note">打 osu! 时她会按断连、全连、失败这些时刻换姿势。
+        别的立绘按皮肤格式（manifest.json + 图片）放进皮肤文件夹，或点「导入皮肤」选它的文件夹。</p>
+    </section>
+    <section class="card">
+      <h2>桌面上</h2>
+      <div class="toggles">
+        <label class="toggle"><span><b>在桌面上显示角色</b><small>她说话时张嘴；只有她身上能点，按住能拖，按住 Ctrl 在她身上滚滚轮调大小</small></span><input type="checkbox" class="switch" data-cfg="pet.enabled"></label>
+      </div>
+      <!-- 2026-11-22 用户：「这样看着感觉好宽，要不再换一下排版」：大小和「回到右下角」并成一行，counter 的选项单独一张卡片（2026-11-22 用户：这个叫 counter，不叫 pp 环） -->
+      <div class="pet-size">
+        <label class="stack slider"><span class="slider-head">大小<b id="scale-value"></b></span><input type="range" min="0.1" max="1.5" step="0.02" data-cfg="pet.scale"><span class="slider-scale"><span>10%</span><span>150%</span></span></label>
+        <button data-call="pet.recenter">回到右下角</button>
+      </div>
+      <ul id="skin-notes" class="plain"></ul>
+    </section>
+    <section class="card" id="hud-card">
+      <h2>脚下的 counter<span class="sub">打图时才出现</span></h2>
+      <div class="toggles">
+        <label class="toggle"><span><b>打图时显示 counter</b><small>她站在一个圆环上，粉色是这首歌打到哪了，下面是 pp 和 100 / 50 / miss</small></span><input type="checkbox" class="switch" data-cfg="pet.hud"></label>
+      </div>
+      <div class="hud-opts">
+        <div class="grid2 mini-toggles">
+          <label class="toggle"><span><b>显示「xxx if FC」</b><small>按现在的准确率，全连能拿多少</small></span><input type="checkbox" class="switch" data-cfg="pet.hudFc"></label>
+          <label class="toggle"><span><b>画难度曲线</b><small>越难越高，打过的变粉（要开着 osu!）</small></span><input type="checkbox" class="switch" data-cfg="pet.hudCurve"></label>
+        </div>
+        <div class="grid3">
+          <label class="stack">字的样子
+            <select data-cfg="pet.hudLayout"><option value="card">黑底卡片</option><option value="paper">浅色成绩条</option><option value="type">只有字</option><option value="line">环下面一行</option><option value="arc">沿着环弯过去</option></select>
+          </label>
+          <div class="stack" id="hud-curve-style"><span>难度曲线</span>
+            <div class="segmented">
+              <label><input type="radio" name="hudCurveStyle" value="bars" data-cfg="pet.hudCurveStyle"><span>柱子</span></label>
+              <label><input type="radio" name="hudCurveStyle" value="wall" data-cfg="pet.hudCurveStyle"><span>墙</span></label>
+            </div>
+          </div>
+          <div class="stack" id="hud-ink"><span>字色（只有字时）</span>
+            <div class="segmented">
+              <label><input type="radio" name="hudInk" value="light" data-cfg="pet.hudInk"><span>浅色</span></label>
+              <label><input type="radio" name="hudInk" value="dark" data-cfg="pet.hudInk"><span>深色</span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </section>
+
+  <!-- ── 说话 ─────────────────────────────────────────────────────────── -->
+  <section class="page" data-page="watch" id="watch" hidden>
+    <header class="page-head"><h1>说话</h1><p>她用什么方式说、多久说一句、一天最多说多少。</p></header>
+    <section class="card">
+      <h2>怎么说</h2>
+      <div class="segmented">
+        <label><input type="radio" name="output" value="subtitle" data-cfg="watch.output"><span>屏幕下方字幕</span></label>
+        <label><input type="radio" name="output" value="bubble" data-cfg="watch.output"><span>桌面角色头顶气泡</span></label>
+        <label><input type="radio" name="output" value="none" data-cfg="watch.output"><span>不出字，只念出来</span></label>
+      </div>
+      <p class="note">osu! 用「全屏独占」时，本地的字幕和桌面角色都盖不上去（声音照常）。录制 / 直播里的角色和字幕靠 OBS 那一份，不受影响。</p>
+      <div class="toggles">
+        <label class="toggle"><span><b>念出来</b><small>用「语音」页配的合成</small></span><input type="checkbox" class="switch" data-cfg="watch.voice"></label>
+        <label class="toggle"><span><b>打的过程中也说</b><small>关掉就只在一把结束时说</small></span><input type="checkbox" class="switch" data-cfg="watch.midPlay"></label>
+        <label class="toggle"><span><b>一场打完记一条小结</b><small>下次她知道你最近打得怎么样</small></span><input type="checkbox" class="switch" data-cfg="watch.remember"></label>
+      </div>
+    </section>
+    <section class="card">
+      <h2>说多少</h2>
+      <div class="grid3">
+        <label class="stack">过程中两句之间至少隔（秒）<input type="number" min="10" max="600" data-cfg="watch.minGapSec"></label>
+        <label class="stack">每首歌过程中最多几句<input type="number" min="0" max="10" data-cfg="watch.perSongMax"></label>
+        <label class="stack">每天最多几句<input type="number" min="1" max="1000" data-cfg="watch.dailyLimit"></label>
+      </div>
+      <p class="note">开局、打完、失败那几句不占「每首最多几句」。</p>
+    </section>
+    <section class="card">
+      <h2>难段预告</h2>
+      <div class="segmented">
+        <label><input type="radio" name="headsUp" value="off" data-cfg="watch.headsUp"><span>关</span></label>
+        <label><input type="radio" name="headsUp" value="voice" data-cfg="watch.headsUp"><span>给我提个醒</span></label>
+      </div>
+      <div class="grid3">
+        <label class="stack">每张图最多报几次<input type="number" min="1" max="8" data-cfg="watch.headsUpMax"></label>
+      </div>
+      <p class="note">开图时读这张图的 .osu，找出明显比别处难的长串、大跳、先串后跳 / 先跳后串、变速，在它前面三四秒用一句话提醒（比如「后面先跳一阵，跳完马上接串」），桌面角色和 OBS 里冒气泡，配好了「语音」就念出来。</p>
+      <p class="hint" id="headsup-info"></p>
+    </section>
+  </section>
+
+  <!-- ── 人设 ─────────────────────────────────────────────────────────── -->
+  <section class="page" data-page="persona" id="persona" hidden>
+    <header class="page-head"><h1>人设</h1><p>她叫什么、怎么称呼你、平时怎么说话。</p></header>
+    <section class="card">
+      <h2>称呼</h2>
+      <div class="grid3">
+        <label class="stack">她叫什么<input type="text" maxlength="40" data-cfg="persona.name"></label>
+        <label class="stack">她怎么称呼你<input type="text" maxlength="40" data-cfg="persona.ownerName"></label>
+        <label class="stack">提到你时用
+          <select data-cfg="persona.ownerPronoun"><option>他</option><option>她</option><option>TA</option></select>
+        </label>
+      </div>
+    </section>
+    <section class="card">
+      <h2>性格和说话方式</h2>
+      <div class="row">
+        <button data-call="persona.open">打开 persona.md</button>
+        <span class="hint" id="persona-info"></span>
+      </div>
+      <p class="note">persona.md 里写她是谁、怎么说话（最多用前 3200 字）。改完保存就行，下一句就按新的来。</p>
+    </section>
+  </section>
+
+  <!-- ── 模型 ─────────────────────────────────────────────────────────── -->
+  <section class="page" data-page="llm" id="llm" hidden>
+    <header class="page-head"><h1>模型</h1><p>她每说一句话，都是这里配的模型写的。</p></header>
+    <section class="card">
+      <div class="grid2">
+        <label class="stack">接口
+          <select id="llm-provider" data-cfg="llm.provider">
+            <option value="openai">OpenAI 兼容（DeepSeek、通义、Kimi、Ollama…）</option>
+            <option value="anthropic">Anthropic（Claude）</option>
+          </select>
+        </label>
+        <label class="stack">模型名<input type="text" maxlength="120" data-cfg="llm.model" placeholder="deepseek-chat"></label>
+        <label class="stack">接口地址<input type="text" data-cfg="llm.baseUrl" placeholder="https://api.deepseek.com/v1"></label>
+        <label class="stack">API Key<input type="password" autocomplete="off" data-secret="llm.apiKey" placeholder="还没填"></label>
+      </div>
+      <div class="row">
+        <button class="primary" data-call="llm.test">测试</button>
+        <span class="hint" id="llm-info"></span>
+      </div>
+      <p class="note">Key 只存在这台电脑上<span id="secret-note"></span>，只发给你填的那个接口地址。Anthropic 不用填接口地址（走代理时才填）。</p>
+    </section>
+  </section>
+
+  <!-- ── 语音 ─────────────────────────────────────────────────────────── -->
+  <section class="page" data-page="tts" id="tts" hidden>
+    <header class="page-head"><h1>语音 <span class="tag">可选</span></h1><p>她念出来用哪家的合成。不想要声音就不用填，「说话」页别开「念出来」。</p></header>
+    <section class="card">
+      <h2>用哪家</h2>
+      <div class="segmented">
+        <label><input type="radio" name="ttsProvider" value="volc" data-cfg="tts.provider"><span>火山引擎</span></label>
+        <label><input type="radio" name="ttsProvider" value="breeze" data-cfg="tts.provider"><span>Breeze（云端）</span></label>
+      </div>
+      <p class="note">切换马上生效；两家合成过的句子都存在本机，同一句话不会重复花额度。</p>
+    </section>
+    <section class="card" id="tts-volc">
+      <h2>火山引擎「豆包语音」</h2>
+      <div class="grid2">
+        <label class="stack">App ID<input type="text" maxlength="120" data-cfg="tts.appId"></label>
+        <label class="stack">Access Key<input type="password" autocomplete="off" data-secret="tts.accessKey" placeholder="还没填"></label>
+        <label class="stack">音色 ID<input type="text" maxlength="120" data-cfg="tts.speaker" placeholder="S_xxxx 或 zh_female_…_bigtts"></label>
+        <label class="stack">资源编号（留空自动选）<input type="text" maxlength="60" data-cfg="tts.resourceId" placeholder="自动"></label>
+      </div>
+    </section>
+    <section class="card" id="tts-breeze" hidden>
+      <h2>Breeze TTS 2（BreezeBlue 云端）</h2>
+      <div class="grid2">
+        <label class="stack">API Key<input type="password" autocomplete="off" data-secret="tts.breezeKey" placeholder="还没填"></label>
+        <label class="stack">音色 ID<input type="text" maxlength="80" data-cfg="tts.breezeVoice" placeholder="voc_xxxx"></label>
+      </div>
+      <div class="row">
+        <button data-call="tts.voices">列出官方中文音色</button>
+        <select id="breeze-voices" data-cfg="tts.breezeVoice" hidden></select>
+      </div>
+      <label class="stack">语气说明（可选，用中文写）<input type="text" maxlength="200" data-cfg="tts.breezeInstructions" placeholder="比如：活泼的少女，语速稍快，语气俏皮"></label>
+      <p class="note">到 breezeblue.ai 注册登录，在 Developer → API Keys 生成 Key（brz_ 开头）。免费档每天要在网站上领一次额度，大约够念 2000 个汉字；合成过的句子存在本机，不会重复花。服务器在境外，网络不好时会超时，那一句只出字。免费档生成的声音不能商用（TomoPet 本来就不商用）。</p>
+    </section>
+    <section class="card">
+      <div class="grid2">
+        <label class="stack">语速（1 是正常）<input type="number" min="0.5" max="2" step="0.1" data-cfg="tts.speed"></label>
+      </div>
+      <div class="row">
+        <button class="primary" data-call="tts.test">试听</button>
+        <span class="hint" id="tts-info">会念一句带小数和百分号的话，顺便听数字念得对不对。</span>
+      </div>
+    </section>
+  </section>
+
+  <!-- ── OBS ──────────────────────────────────────────────────────────── -->
+  <section class="page" data-page="obs" id="obs" hidden>
+    <header class="page-head"><h1>OBS</h1><p>把角色和字幕装进 tosu，OBS 加浏览器源就能录进去。</p></header>
+    <section class="card">
+      <div class="toggles">
+        <label class="toggle"><span><b>把角色装进 tosu</b><small>连上 tosu 时自动装 / 更新</small></span><input type="checkbox" class="switch" data-cfg="counter.enabled"></label>
+      </div>
+      <dl class="facts">
+        <dt>状态</dt><dd id="obs-status">…</dd>
+        <dt>tosu 在哪</dt><dd><span id="obs-tosudir"></span> <button class="small" data-call="tosu.pickDir">手动选…</button> <button class="small" id="btn-clear-tosudir">自动找</button></dd>
+      </dl>
+      <div class="row"><button data-call="counter.sync">重新装进 tosu</button></div>
+    </section>
+    <section class="card">
+      <h2>浏览器源地址</h2>
+      <div class="url-row">
+        <div class="url-label"><b>角色</b><small>宽高比如 600 × 700</small></div>
+        <code id="obs-url"></code>
+        <button class="small" data-copy="obs-url">复制</button>
+        <button class="small" data-open="obs-url">预览</button>
+      </div>
+      <div class="url-row">
+        <div class="url-label"><b>全屏字幕</b><small>宽高和画布一样</small></div>
+        <code id="obs-suburl"></code>
+        <button class="small" data-copy="obs-suburl">复制</button>
+        <button class="small" data-open="obs-suburl">预览</button>
+      </div>
+      <ol class="note">
+        <li>OBS 里加一个「浏览器」源，地址填「角色」那条。她开口时张嘴、头顶冒气泡。</li>
+        <li>想要像视频字幕那样铺在画面底部：再加一个「浏览器」源，地址填「全屏字幕」那条；
+          然后到 tosu 的页面里把角色那个 counter 的「说话时」改成「都不显示」，免得说两遍。</li>
+        <li>气泡 / 字号这些在 tosu 的页面（<a href="#" data-open-url="http://127.0.0.1:24050/">127.0.0.1:24050</a>）里每个 counter 的设置里改。</li>
+      </ol>
+    </section>
+  </section>
+
+  <!-- ── 高级 ─────────────────────────────────────────────────────────── -->
+  <section class="page" data-page="advanced" id="advanced" hidden>
+    <header class="page-head"><h1>高级</h1><p>不常改的：开机自启和更新、osu! 官网的玩家标签、快慢怎么分、全部成绩、数据放在哪。</p></header>
+    <section class="card">
+      <h2>启动和更新</h2>
+      <div class="toggles">
+        <label class="toggle"><span><b>开机自动启动</b><small id="autostart-note">开机后只待在右下角托盘、不弹设置窗口；tosu 一开她就在看</small></span><input type="checkbox" class="switch" id="autostart"></label>
+        <label class="toggle"><span><b>自动检查更新</b><small>打开程序时和每隔几个小时去 GitHub 看一眼，有新版本时在托盘提示；关掉就不查也不提示，要查时点下面的「检查更新」</small></span><input type="checkbox" class="switch" data-cfg="update.autoCheck"></label>
+      </div>
+      <!-- 自动更新（2026-11-22）：有新版本时「更新」下载、退出、装好后自己重开；设置和数据不受影响 -->
+      <div class="row" id="update-row">
+        <span class="hint" id="update-info"></span>
+        <button data-call="update.check" id="update-check">检查更新</button>
+        <button class="primary" data-call="update.install" id="update-install" hidden>更新</button>
+        <a href="#" id="update-notes" hidden>看看改了什么</a>
+      </div>
+    </section>
+    <section class="card" id="osu-api">
+      <h2>osu! 官网的玩家标签</h2>
+      <p class="note">开局点评时，她会看这张图在 osu! 官网上的玩家标签（User Tags，比如 tech/aim control、streams/flow aim），知道是张什么图。
+        要用你自己的 OAuth 应用：在 <a href="#" data-open-url="https://osu.ppy.sh/home/account/edit#oauth">osu! 官网 → 设置 → OAuth</a></p>
+      <div class="grid2">
+        <label class="stack">Client ID<input type="text" maxlength="20" inputmode="numeric" data-cfg="osuApi.clientId" placeholder="一串数字"></label>
+        <label class="stack">Client Secret<input type="password" autocomplete="off" data-secret="osuApi.clientSecret" placeholder="还没填"></label>
+      </div>
+      <div class="row">
+        <button data-call="osuapi.test">试一下</button>
+      </div>
+      <p class="note" id="osuapi-info"></p>
+    </section>
+    <section class="card" id="rulers">
+      <h2>快慢的界限</h2>
+      <p class="note">开局那句说这张图快不快，就按这里分。BPM、AR 都算上 mod。</p>
+      <div class="grid3">
+        <label class="stack">BPM 到多少算「很快」<input type="number" min="60" max="500" data-cfg="rulers.bpmVeryFast"></label>
+        <label class="stack">BPM 到多少算「偏快」<input type="number" min="60" max="500" data-cfg="rulers.bpmFast"></label>
+        <label class="stack">BPM 不超过多少算「偏慢」<input type="number" min="30" max="500" data-cfg="rulers.bpmSlowMax"></label>
+        <label class="stack">AR 低于多少算「偏慢」<input type="number" min="0" max="11" step="0.1" data-cfg="rulers.arSlowBelow"></label>
+        <label class="stack">AR 高于多少算「偏快」<input type="number" min="0" max="11" step="0.1" data-cfg="rulers.arFastAbove"></label>
+        <label class="stack">「很快」时补一句（可空）<input type="text" maxlength="80" data-cfg="rulers.bpmVeryFastNote"></label>
+      </div>
+    </section>
+    <section class="card" id="plays">
+      <h2>最近几把</h2>
+      <div class="table-wrap">
+        <table id="plays-table"><thead><tr><th>时间</th><th>歌</th><th>难度</th><th>结果</th><th>准确率</th><th>连击</th><th>miss</th></tr></thead><tbody></tbody></table>
+      </div>
+      <div class="row"><button class="danger" data-call="plays.clear" data-confirm="清空最近的成绩记录？（一场打完的小结不受影响）">清空</button></div>
+    </section>
+    <section class="card" id="about">
+      <h2>关于</h2>
+      <dl class="facts">
+        <dt>数据目录</dt><dd><code id="about-data"></code> <button class="small" data-call="data.open">打开</button></dd>
+        <dt>日志</dt><dd>数据目录里的 <code>logs/osu-pet.log</code></dd>
+      </dl>
+      <p class="note">设置、人设、成绩、小结、皮肤都在数据目录里（TomoPet 以前叫 osu-pet，文件夹名没改）。tosu 是第三方工具，这个程序不带它、不替你下载：<a href="#" data-open-url="https://github.com/tosuapp/tosu/releases">tosu 的发布页</a>。</p>
+    </section>
+  </section>
+</main>
+
+<div id="toasts"></div>
+<script src="./settings.js"></script>
+</body>
+</html>

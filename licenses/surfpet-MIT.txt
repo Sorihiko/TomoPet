@@ -1,0 +1,25 @@
+来源：https://github.com/Mieksido/surfpet （桌宠 feiyu-pet 0.2.3 的源码仓库）
+用于：renderer/rig.ts（原样，和上游 src/renderer/rig.ts 一致，只多了文件头注释）；renderer/pet-entry.ts 的鼠标交互参照了上游 src/renderer/index.ts。
+上游 LICENSE 在 MIT 正文后面附了「第三方组件与合规边界」一段，它自己声明不是许可证的一部分，这里不收。
+
+MIT License
+
+Copyright (c) 2026 Derpyu520 and qq-bridge / QSH contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

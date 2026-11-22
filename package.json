@@ -1,0 +1,28 @@
+{
+  "name": "tomopet",
+  "productName": "TomoPet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TomoPet：看你打 osu! 的桌宠——连 tosu，在关键时刻说一句（本地字幕 / 语音 / 桌面角色 / OBS 叠加）",
+  "type": "module",
+  "main": "app/main.js",
+  "scripts": {
+    "build": "node scripts/build-renderer.mjs && node scripts/bundle-crosspet.mjs",
+    "start": "node scripts/build-renderer.mjs --if-missing && node scripts/bundle-crosspet.mjs --if-missing && electron .",
+    "test": "node scripts/run-tests.mjs",
+    "bundle-crosspet": "node scripts/bundle-crosspet.mjs",
+    "package": "node scripts/package-win.mjs"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.11.0"
+  },
+  "devDependencies": {
+    "electron": "^45.4.1",
+    "esbuild": "^0.28.2",
+    "pixi.js": "^8.23.0"
+  }
+}

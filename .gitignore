@@ -1,0 +1,49 @@
+# ── 依赖和构建产物（npm install / npm run build 会重新生成）──────────────────
+node_modules/
+dist/
+# 打包出来给别人的程序（npm run package），以及打包时的临时文件
+/release/
+*.zip
+
+# ── 不进仓库的素材（代码和受版权保护的素材分开）──────────────────────────────
+# CrossPet 的立绘（CC BY-NC-SA 4.0）和由它转出来的皮肤
+/art/
+/skins-bundled/
+# 自己放的皮肤
+/skins/
+
+# ── 本机数据和私人文件 ────────────────────────────────────────────────────────
+# 开发时的数据目录（OSU_PET_HOME 指过来的）：设置、密钥、成绩、语音缓存都在里面
+.osu-pet-home/
+# 自己写的人设（模板是 persona.example.md）
+/persona.md
+# 自己用的不弹命令行窗口的启动脚本（2026-11-22 用户：移出仓库）
+/TomoPet.vbs
+# 环境变量和密钥
+.env
+.env.*
+*.pem
+*.key
+
+# ── 离屏自检、测试、调试留下的东西 ────────────────────────────────────────────
+/smoke-out/
+/smoke*/
+coverage/
+*.log
+npm-debug.log*
+*.tmp
+*.bak
+
+# ── 编辑器和 AI 助手的本地设置 ────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*~
+.claude/settings.local.json
+
+# ── 系统生成的文件 ────────────────────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store

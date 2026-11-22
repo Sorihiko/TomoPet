@@ -1,0 +1,185 @@
+{
+  "_comment": "scripts/mouths/make-mouths.py 的配置。坐标都是 CrossPet 原图 idle.webp 的像素。source：从 hunmer 的视频里抠（face 对齐用的脸框，box 嘴框，frames 用哪几帧）；donor：把别的皮肤做好的嘴移植过来（center 嘴中心，scale 缩放，deg 旋转）。closed 是闭嘴那一档，只有立绘本身张着嘴时才需要（说话时要先把嘴合上；这时原来的嘴会先用肤色盖掉）。recolor：把嘴换成立绘自己那张嘴的颜色和细线（立绘本来张着嘴才量得到色板；grok、qwen 这类试过反而变差，没开）。",
+  "repo": "hunmer/aboutme-pets",
+  "commit": "df864c0c7db75857854740b301f6677e50d0b29c",
+  "credit": "张嘴口型取自 hunmer/aboutme-pets（https://github.com/hunmer/aboutme-pets，作者 hunmer，AI 生成），CC BY-NC-SA 4.0",
+  "skins": {
+    "crosspet-claude": {
+      "source": {
+        "pack": "claude",
+        "action": "碎碎念-对屏碎碎念",
+        "sha": "fd33d9cbd5f41b328b63810df87fa2d8d3f619c0"
+      },
+      "face": [150, 170, 380, 320],
+      "box": [236, 276, 282, 306],
+      "frames": {
+        "half": 14,
+        "wide": 93
+      },
+      "tint": true,
+      "sharpen": 50
+    },
+    "crosspet-gpt": {
+      "source": {
+        "pack": "gpt",
+        "action": "对屏碎碎念",
+        "sha": "f6b96a16d2b6cbc24e55c491fd46de0188a470ae"
+      },
+      "face": [165, 230, 375, 345],
+      "box": [252, 309, 288, 331],
+      "frames": {
+        "half": 27,
+        "wide": 93
+      },
+      "tint": true,
+      "sharpen": 40
+    },
+    "crosspet-gemini": {
+      "source": {
+        "pack": "gemini",
+        "action": "碎碎念-对屏碎碎念",
+        "sha": "92af62e983de4dc1e6d2f1c3f74b087fd20ef529"
+      },
+      "face": [160, 235, 360, 350],
+      "box": [221, 306, 273, 340],
+      "frames": {
+        "half": 27,
+        "wide": 78
+      },
+      "sharpen": 35,
+      "tint": true
+    },
+    "crosspet-grok": {
+      "source": {
+        "pack": "grok",
+        "action": "碎碎念-对屏碎碎念",
+        "sha": "75ca210f8f4ad404526479cfa71a927637debf0c"
+      },
+      "face": [285, 225, 475, 345],
+      "box": [346, 290, 418, 340],
+      "mask": "roundrect",
+      "frames": {
+        "closed": 94,
+        "half": 12,
+        "wide": 0
+      },
+      "restClosed": false,
+      "sharpen": 40,
+      "tint": true
+    },
+    "crosspet-qwen": {
+      "source": {
+        "pack": "qwen",
+        "action": "碎碎念-对屏碎碎念",
+        "sha": "0ac056a475d20b8d72596dfee6d3929ddb8e6c67"
+      },
+      "face": [190, 215, 365, 325],
+      "box": [254, 275, 310, 328],
+      "mask": "ellipse",
+      "frames": {
+        "closed": 0,
+        "half": 23,
+        "wide": 87
+      },
+      "restClosed": false,
+      "hint": {
+        "s": 0.4012,
+        "deg": -6
+      },
+      "tint": true
+    },
+    "crosspet-kimi": {
+      "source": {
+        "pack": "kimi",
+        "action": "碎碎念-对屏碎碎念",
+        "sha": "c15d0ac40b218413f0362c0f4a0b044b55162340"
+      },
+      "face": [160, 190, 380, 320],
+      "box": [246, 276, 300, 315],
+      "mask": "roundrect",
+      "tint": true,
+      "frames": {
+        "closed": 16,
+        "half": 22,
+        "wide": 26
+      },
+      "restClosed": false,
+      "sharpen": 25,
+      "recolor": true
+    },
+    "crosspet-deepseek": {
+      "donor": "crosspet-kimi",
+      "center": [262, 350],
+      "scale": 1.15,
+      "closed": true,
+      "sharpen": 25,
+      "recolor": true
+    },
+    "crosspet-deepseek-hoodie": {
+      "donor": "crosspet-kimi",
+      "center": [262.5, 321],
+      "scale": 1.1,
+      "closed": true,
+      "restClosed": false,
+      "recolor": true
+    },
+    "crosspet-deepseek-knit": {
+      "donor": "crosspet-kimi",
+      "center": [243, 326],
+      "scale": 1.15,
+      "deg": 7,
+      "closed": true,
+      "restClosed": false,
+      "sharpen": 40,
+      "recolor": true
+    },
+    "crosspet-deepseek-pajamas": {
+      "donor": "crosspet-kimi",
+      "center": [264, 352],
+      "scale": 1.25,
+      "closed": true,
+      "restClosed": false,
+      "sharpen": 30,
+      "recolor": true
+    },
+    "crosspet-deepseek-winter": {
+      "donor": "crosspet-kimi",
+      "center": [246.5, 332],
+      "scale": 1.05,
+      "deg": 0,
+      "closed": true,
+      "restClosed": false,
+      "sharpen": 50,
+      "recolor": true
+    },
+    "crosspet-claude-saint": {
+      "donor": "crosspet-claude",
+      "center": [275.3, 287.7],
+      "scale": 0.98,
+      "sharpen": 40
+    },
+    "crosspet-gemini-magician": {
+      "donor": "crosspet-claude",
+      "center": [227, 278],
+      "scale": 0.96,
+      "deg": -13,
+      "sharpen": 40
+    },
+    "crosspet-gpt-onesie": {
+      "donor": "crosspet-claude",
+      "center": [254.5, 284],
+      "scale": 0.8,
+      "deg": -6,
+      "closed": true,
+      "sharpen": 30,
+      "restClosed": false
+    },
+    "crosspet-glm": {
+      "donor": "crosspet-kimi",
+      "center": [272.5, 288.5],
+      "scale": 1,
+      "closed": true,
+      "recolor": true
+    }
+  }
+}

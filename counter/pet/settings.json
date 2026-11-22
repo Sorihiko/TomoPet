@@ -1,0 +1,90 @@
+[
+  {
+    "uniqueID": "lineStyle",
+    "type": "options",
+    "title": "说话时",
+    "description": "气泡：从她头顶冒出来；人物下方字幕：在她脚下出一行字；都不显示：只张嘴（配合「TomoPet 字幕」那个源用）",
+    "options": [
+      "气泡",
+      "人物下方字幕",
+      "都不显示"
+    ],
+    "value": "气泡"
+  },
+  {
+    "uniqueID": "fontSize",
+    "type": "number",
+    "title": "字号",
+    "description": "像素，默认 30",
+    "value": 30
+  },
+  {
+    "uniqueID": "ppRing",
+    "type": "options",
+    "title": "脚下的 counter",
+    "description": "打图时她站在一个圆环上：粉色那截是这首歌打到哪了，前面一行是 pp 和 100 / 50 / miss",
+    "options": [
+      "显示",
+      "不显示"
+    ],
+    "value": "显示"
+  },
+  {
+    "uniqueID": "ppRingCurve",
+    "type": "options",
+    "title": "环上画难度曲线",
+    "description": "一圈柱子竖在脚下的环上：越难的地方柱子越高，打过的是粉色、后面的是灰色",
+    "options": [
+      "显示",
+      "不显示"
+    ],
+    "value": "显示"
+  },
+  {
+    "uniqueID": "ppRingCurveStyle",
+    "type": "options",
+    "title": "难度曲线的样子",
+    "description": "一圈柱子，或者连成一圈墙（顶上一条亮线）",
+    "options": [
+      "柱子",
+      "墙"
+    ],
+    "value": "墙"
+  },
+  {
+    "uniqueID": "ppLabelStyle",
+    "type": "options",
+    "title": "pp 那块字的样子",
+    "description": "黑底卡片、浅色成绩条、只有字（没有底），或者原来的环下面一行 / 沿着环",
+    "options": [
+      "黑底卡片",
+      "浅色成绩条",
+      "只有字",
+      "环下面一行",
+      "沿着环"
+    ],
+    "value": "黑底卡片"
+  },
+  {
+    "uniqueID": "ppRingInk",
+    "type": "options",
+    "title": "只有字的字色",
+    "description": "「只有字」那种没有底：画面暗选浅色，画面亮选深色",
+    "options": [
+      "浅色",
+      "深色"
+    ],
+    "value": "浅色"
+  },
+  {
+    "uniqueID": "ppRingFc",
+    "type": "options",
+    "title": "显示 if FC",
+    "description": "pp 后面的「xxx if FC」：按现在的准确率，这张图全连能拿多少 pp",
+    "options": [
+      "显示",
+      "不显示"
+    ],
+    "value": "不显示"
+  }
+]

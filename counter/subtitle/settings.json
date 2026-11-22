@@ -1,0 +1,16 @@
+[
+  {
+    "uniqueID": "fontSize",
+    "type": "number",
+    "title": "字号",
+    "description": "像素，默认 40（1080p 画面）",
+    "value": 40
+  },
+  {
+    "uniqueID": "bottom",
+    "type": "number",
+    "title": "离底边多远",
+    "description": "占画面高度的百分比，默认 8",
+    "value": 8
+  }
+]

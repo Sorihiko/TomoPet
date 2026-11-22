@@ -1,0 +1,34 @@
+<!doctype html>
+<!-- 桌面角色窗口（script-src 里的 unsafe-eval：PixiJS v8 用 new Function 生成着色器的同步代码，页面只加载本机自己的文件）：透明、置顶；只有角色身上能点。渲染层是 dist/pet-renderer.js（renderer/pet-entry.ts 打包出来的）。
+     气泡的样式照搬 OBS 那一页（counter/pet/index.html）。 -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; worker-src blob:" />
+    <title>TomoPet</title>
+    <style>
+      html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; }
+      canvas { display: block; }
+      /* 气泡：在她左上方，右下角伸出尾巴斜指着头（位置由 renderer/bubble.ts 按她头的位置算）。 */
+      #bubble {
+        position: fixed; z-index: 11; width: max-content; max-width: var(--max-w, 86vw); box-sizing: border-box; padding: .55em .8em;
+        background: rgba(255, 255, 255, .96); color: #2b2f3a; border-radius: 16px; box-shadow: 0 4px 14px rgba(0, 0, 0, .28);
+        font: 600 18px/1.4 "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif; word-break: break-all; text-align: left;
+        opacity: 0; transform: translate(6px, 6px) scale(.96); transform-origin: 100% 100%;
+        transition: opacity .18s ease, transform .18s ease; pointer-events: none;
+      }
+      #bubble.on { opacity: 1; transform: none; }
+      #bubble::after {
+        content: ""; position: absolute; right: var(--tail-right, 22px); bottom: -13px;
+        border-style: solid; border-width: 14px 0 0 17px; border-color: rgba(255, 255, 255, .96) transparent transparent transparent;
+        transform: skewX(-24deg); transform-origin: 0 0;
+      }
+      #err { position: fixed; left: 8px; top: 8px; z-index: 20; color: #fff; background: rgba(160, 40, 40, .9); font: 13px/1.5 sans-serif; padding: 6px 10px; border-radius: 6px; display: none; max-width: 90%; }
+    </style>
+  </head>
+  <body>
+    <div id="bubble"></div>
+    <div id="err"></div>
+    <script src="../../dist/pet-renderer.js"></script>
+  </body>
+</html>
