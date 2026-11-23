@@ -244,6 +244,7 @@ export function createHeadsUp({ config, tts = null, overlay = null, pet = null, 
     try { counter?.say?.({ text: phrase, durationMs: ms, mouth }); } catch {}
     try { pet?.speak?.({ text: phrase, durationMs: ms, bubble: true, mouth }); } catch (error) { log('[heads-up] 桌面角色冒气泡失败：', String(error?.message ?? error).slice(0, 120)); }
     lastFired = { at: d.now(), kind: section.kind, cue: phrase, start: section.start, voiced: mode === 'voice' && Boolean(voice) };
+    log(`[heads-up] 提醒（${(section.start / 1000).toFixed(1)}s ${section.kind}${voice && mode === 'voice' ? '，念了' : ''}）：${phrase}`);
   }
 
   /** 看看有没有到点的段：到点就报；不到一帧就到点的，用定时器卡准。 */

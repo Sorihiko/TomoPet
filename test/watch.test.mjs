@@ -233,6 +233,8 @@ function harness({ config = {}, petVisible = true, withPet = true, counter = nul
   state.reply = '「ROLE：这把稳啊（笑）」\n第二行不要';
   const done = await service.handleEvent(event('finish', { at: state.clock, rank: 'A', pp: 151, progress: 1 }));
   assert.deepEqual(done, { said: true, text: '这把稳啊' }, '去掉引号、名字开头、括号里的动作，只留第一行');
+  // 每一句都记进日志，整理过的带上模型原话（2026-11-22 用户：「有没有办法看别人桌宠说了什么」）
+  assert.ok(calls.logs.some((l) => l.includes('[osu] 说了（打完）：这把稳啊') && l.includes('模型原话：「ROLE：这把稳啊（笑）」')), calls.logs.join(' | '));
   assert.equal(calls.subtitles.length, 1);
   const prompt = calls.complete[0];
   assert.ok(prompt.system.includes('ROLE') && prompt.system.includes('PERSONA_TEXT') && prompt.system.includes('MEMORY_TEXT') && prompt.system.includes('OWNER_NAME'), '人设、最近几场的小结、称呼都带上');

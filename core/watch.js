@@ -230,6 +230,8 @@ export function unitizeCombo(line, event) {
 }
 
 const END_KINDS = new Set(['finish', 'fail', 'quit']);
+/** 日志里写「说了（断连）：……」用的名字（2026-11-22 用户：「有没有办法看别人桌宠说了什么」）。 */
+const KIND_LABEL = { start: '开局', combo: '连击关口', 'combo-break': '断连', 'acc-drop': '掉准度', break: '休息段', 'rank-up': '超人', 'rank-down': '被超', retry: '重开', finish: '打完', fail: '失败', quit: '退出', test: '试一句' };
 // 「气泡没地方出」的几种错：桌面角色打开 / OBS 角色装好以后就不成立了。
 const BUBBLE_BLOCKED = new Set(['osu.pet-hidden', 'osu.pet-unavailable']);
 
@@ -513,7 +515,11 @@ export function createOsuWatchService({ config, persona, llm, tts = null, overla
       const result = await llm.complete({ system: prompt.system, user: prompt.user, maxTokens: 200 });
       recordUsage(result, d.now());
       const line = unitizeCombo(shape(result.text, prompt.maxChars), event);
-      if (!line) return { ok: false, reason: 'empty' };
+      const kindLabel = KIND_LABEL[event.kind] || event.kind;
+      if (!line) {
+        log(`[osu] 没说成（${kindLabel}）：模型回的话整理后是空的（原话：${JSON.stringify(String(result.text).slice(0, 80))}）`);
+        return { ok: false, reason: 'empty' };
+      }
       // 念出来：合成不出来（没配 / 超时 / 报错）就只出字，不为了声音把这句话丢掉。
       const { voice, failure } = await synthesizeVoice(line, wcfg);
       // 字有没有地方显示：字幕；或者气泡模式下桌面 / OBS 里有一个角色看得见。
@@ -563,6 +569,10 @@ export function createOsuWatchService({ config, persona, llm, tts = null, overla
       store.said[dayKey(now)] = saidToday(now) + 1;
       recentLines = [...recentLines, line].slice(-8);
       lastComment = { at: now, kind: event.kind, text: line, voiced: Boolean(voice) };
+      // 每一句都记进日志（只在本机）：别人的桌宠说话不对劲时，让他把 osu-pet.log 发过来就能看到她说了什么。
+      // 整理过（截短、换写法）的话后面带上模型原话
+      const raw = String(result.text).trim();
+      log(`[osu] 说了（${kindLabel}${voice ? '，念了' : ''}）：${line}${raw && raw !== line ? `（模型原话：${raw.slice(0, 80)}）` : ''}`);
       lastError = null;
       persist();
       return { ok: true, text: line };

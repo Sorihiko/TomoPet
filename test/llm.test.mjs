@@ -48,6 +48,11 @@ const response = (status, body) => ({ ok: status >= 200 && status < 300, status,
   await expectCode(llm.complete({ system: 's', user: 'u' }), 'llm.bad-response');
   reply = () => response(200, { choices: [{ message: { content: '   ' } }] });
   await expectCode(llm.complete({ system: 's', user: 'u' }), 'llm.empty');
+  // 会思考的模型想到一半到了字数上限（2026-11-22 朋友用智谱 GLM 一直回空）：说清楚原因、提示换不带思考的
+  reply = () => response(200, { model: 'glm-4.6', choices: [{ finish_reason: 'length', message: { content: '', reasoning_content: '嗯，用户刚断连了，我想想怎么安慰……' } }] });
+  await assert.rejects(llm.complete({ system: 's', user: 'u' }), (e) => e.code === 'llm.empty' && e.message.includes('还在思考') && e.hint.includes('glm-4-flash'));
+  reply = () => response(200, { choices: [{ finish_reason: 'length', message: { content: '' } }] });
+  await assert.rejects(llm.complete({ system: 's', user: 'u' }), (e) => e.code === 'llm.empty' && e.message.includes('截成了空的'));
   reply = () => { throw Object.assign(new Error('fetch failed'), { name: 'TypeError' }); };
   await expectCode(llm.complete({ system: 's', user: 'u' }), 'llm.network');
   reply = () => { throw Object.assign(new Error('timed out'), { name: 'TimeoutError' }); };

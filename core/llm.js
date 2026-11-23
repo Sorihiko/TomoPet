@@ -69,8 +69,11 @@ export function createLlm({ config, fetchImpl = globalThis.fetch, anthropicClien
     }
     let data;
     try { data = JSON.parse(raw); } catch { throw codedError('llm.bad-response', '模型服务回的不是 JSON', '「接口地址」可能填成了网页地址；OpenAI 兼容接口一般以 /v1 结尾。'); }
-    const text = String(data?.choices?.[0]?.message?.content ?? '').trim();
-    return { text, usage: { input: Number(data?.usage?.prompt_tokens) || 0, output: Number(data?.usage?.completion_tokens) || 0 }, model: String(data?.model || cfg.model) };
+    const choice = data?.choices?.[0];
+    const text = String(choice?.message?.content ?? '').trim();
+    // 会先「思考」的模型（GLM-4.5 / 4.6、deepseek-reasoner、Qwen3 等）把想的放在 reasoning_content 里，也算在 max_tokens 里
+    const reasoning = String(choice?.message?.reasoning_content ?? choice?.message?.reasoning ?? '');
+    return { text, finish: String(choice?.finish_reason ?? ''), reasoningChars: reasoning.length, usage: { input: Number(data?.usage?.prompt_tokens) || 0, output: Number(data?.usage?.completion_tokens) || 0 }, model: String(data?.model || cfg.model) };
   }
 
   async function completeAnthropic(cfg, { system, user, maxTokens }) {
@@ -100,7 +103,8 @@ export function createLlm({ config, fetchImpl = globalThis.fetch, anthropicClien
       throw codedError('llm.refused', `模型拒绝写这一句${category ? `（${category}）` : ''}`, '偶尔会误拦；下一次照常。一直这样就换个模型。');
     }
     const text = (Array.isArray(response?.content) ? response.content : []).filter((block) => block?.type === 'text').map((block) => block.text).join('').trim();
-    return { text, usage: { input: Number(response?.usage?.input_tokens) || 0, output: Number(response?.usage?.output_tokens) || 0 }, model: String(response?.model || cfg.model) };
+    const thinking = (Array.isArray(response?.content) ? response.content : []).filter((block) => block?.type === 'thinking').map((block) => String(block.thinking ?? '')).join('');
+    return { text, finish: String(response?.stop_reason ?? ''), reasoningChars: thinking.length, usage: { input: Number(response?.usage?.input_tokens) || 0, output: Number(response?.usage?.output_tokens) || 0 }, model: String(response?.model || cfg.model) };
   }
 
   /** 写一句话。失败抛 llm.*。 */
@@ -109,8 +113,15 @@ export function createLlm({ config, fetchImpl = globalThis.fetch, anthropicClien
     if (!state.ok) throw codedError(state.code, state.error, state.hint);
     const cfg = config();
     const result = cfg.provider === 'anthropic' ? await completeAnthropic(cfg, { system, user, maxTokens }) : await completeOpenAI(cfg, { system, user, maxTokens });
-    if (!result.text) throw codedError('llm.empty', '模型回了个空的', '偶尔会这样；一直这样就换个模型，或者把 max tokens 相关的限制调大。');
-    return result;
+    if (!result.text) {
+      // 说清楚为什么空（2026-11-22：朋友用智谱 GLM 一直「模型回了个空的」，原因是会思考的模型想到一半就到了字数上限）
+      const cut = result.finish === 'length' || result.finish === 'max_tokens';
+      if (cut && result.reasoningChars > 0) throw codedError('llm.empty', `模型还在思考就用完了字数，没写出回答（${result.model}）`, '这是会先「思考」的模型：换成不带思考的，比如智谱的 glm-4-flash / glm-4-air、DeepSeek 的 deepseek-chat。');
+      if (cut) throw codedError('llm.empty', `模型的回答被字数上限截成了空的（${result.model}）`, '换个模型试试；一直这样把日志发给开发者。');
+      throw codedError('llm.empty', `模型回了个空的${result.finish ? `（结束原因：${result.finish}）` : ''}`, '偶尔会这样；一直这样就换个模型。');
+    }
+    const { finish: _finish, reasoningChars: _reasoning, ...out } = result; // 只在上面判断空回答时用
+    return out;
   }
 
   return { ready, complete };
