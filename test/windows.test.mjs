@@ -44,7 +44,8 @@ function fakeElectron({ loadFails = false, cursor = { x: 500, y: 500 } } = {}) {
     setMenu() {}
     setBounds(bounds) { this.bounds = { ...this.bounds, ...bounds }; }
     getPosition() { return [this.bounds.x, this.bounds.y]; }
-    setPosition(x, y) { this.bounds.x = x; this.bounds.y = y; }
+    // 和 Windows 缩放屏幕（125% / 150%）上的 Electron 一样：setPosition 每调一次窗口被取整变大一点（拖动时她会自己跑）
+    setPosition(x, y) { this.bounds.x = x; this.bounds.y = y; this.bounds.width += 1; this.bounds.height += 1; }
     getSize() { return [this.bounds.width, this.bounds.height]; }
     loadURL(url) { this.url = url; return loadFails ? Promise.reject(new Error('ERR_FILE_NOT_FOUND')) : Promise.resolve(); }
     finishLoad() { this.webContents.listeners['did-finish-load']?.(); }
@@ -193,11 +194,13 @@ function fakeElectron({ loadFails = false, cursor = { x: 500, y: 500 } } = {}) {
   pet.setInteractive(false);
   assert.equal(win.calls.at(-1), 'ignore:true:true');
   // 拖动：跟着鼠标走，松手记位置。
+  const sizeBeforeDrag = win.getSize();
   pet.dragStart();
   e.cursor.x += 120; e.cursor.y -= 60;
   await tick(60);
   pet.dragEnd();
   assert.deepEqual(win.getPosition(), [o.x + 120, o.y - 60]);
+  assert.deepEqual(win.getSize(), sizeBeforeDrag, '拖动时窗口大小不变（缩放屏幕上 setPosition 会把窗口撑大，她就自己跑了）');
   assert.deepEqual(saved.at(-1), { x: o.x + 120, y: o.y - 60 }, '位置记进设置');
   // 右键菜单 → 隐藏角色 / 打开设置 / 回到右下角。
   pet.openMenu();

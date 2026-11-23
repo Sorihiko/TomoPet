@@ -251,16 +251,22 @@ export function createPetWindow({ electron, config, savePosition = () => {}, res
     else win.setIgnoreMouseEvents(true, { forward: true });
   }
 
-  /** 按住拖动：记下鼠标和窗口左上角的距离，之后每 16 毫秒跟一次鼠标，直到松手。 */
+  /**
+   * 按住拖动：记下鼠标和窗口左上角的距离，之后每 16 毫秒跟一次鼠标，直到松手。
+   * 用 setBounds 带上按下时的大小，不用 setPosition（2026-11-22 朋友：「长按拖桌宠的位置桌宠会自己跑」）：
+   * Windows 开了 125% / 150% 这类缩放时，Electron 的 setPosition 每调一次窗口就被取整变大一点，拖三秒能从 256×408 长到 441×607，
+   * 她在窗口里是贴着底边居中的，窗口一长她就离开鼠标往右下跑（--force-device-scale-factor=1.25 复现过；setBounds 拖完大小不变）。
+   */
   function dragStart() {
     if (!alive() || dragTimer) return;
     const cursor = screen.getCursorScreenPoint();
     const [x, y] = win.getPosition();
-    dragOffset = { x: cursor.x - x, y: cursor.y - y };
+    const [width, height] = win.getSize();
+    dragOffset = { x: cursor.x - x, y: cursor.y - y, width, height };
     dragTimer = setInterval(() => {
       if (!alive() || !dragOffset) { stopDrag(false); return; }
       const now = screen.getCursorScreenPoint();
-      win.setPosition(now.x - dragOffset.x, now.y - dragOffset.y);
+      win.setBounds({ x: now.x - dragOffset.x, y: now.y - dragOffset.y, width: dragOffset.width, height: dragOffset.height });
     }, 16);
     dragTimer.unref?.();
   }
@@ -269,7 +275,7 @@ export function createPetWindow({ electron, config, savePosition = () => {}, res
     if (!alive()) return false;
     const [width, height] = win.getSize();
     const pos = positionFor({ width, height }, { x: null, y: null });
-    win.setPosition(pos.x, pos.y);
+    win.setBounds({ x: pos.x, y: pos.y, width, height }); // 同上：缩放屏幕上 setPosition 会把窗口撑大
     try { savePosition({ x: null, y: null }); } catch {}
     return true;
   }
