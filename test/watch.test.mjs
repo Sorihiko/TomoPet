@@ -226,6 +226,92 @@ function harness({ config = {}, petVisible = true, withPet = true, counter = nul
   fs.rmSync(PLAYS, { force: true });
 }
 
+{
+  // 日志带上当时的游戏数据、耗时，没说的也写原因（2026-11-23 用户：「知道 ai 什么时候说的话和游戏数据有什么关系」）
+  fs.rmSync(PLAYS, { force: true });
+  const { state, calls, service } = harness({ config: { voice: true } });
+  const map = { title: 'SONG_TITLE', version: 'Insane', stars: 4.83, maxCombo: 800, bpm: 180, ar: 9.3, cs: 4 };
+  const logs = () => calls.logs.join('\n');
+  const after = (prefix) => { const i = calls.logs.findIndex((l) => l.startsWith(prefix)); return i >= 0 ? calls.logs[i + 1] ?? '' : ''; };
+
+  await service.handleEvent(event('start', { at: state.clock, map, timeMs: 900, progress: 0, n100: 0, n50: 0, miss: 0, peakCombo: 0, pp: 0 }));
+  assert.ok(calls.logs.includes('[osu] 开局：SONG_TITLE [Insane] +HD｜4.83 星｜BPM 180｜AR 9.3｜CS 4｜800 combo'), logs());
+  assert.ok(after('[osu] 说了（开局，念了）：LINE').startsWith('[osu]   当时：开局｜SONG_TITLE [Insane] +HD｜谱面 0:00（0%）'), logs());
+
+  // 断连：事件在 0.5 秒前，模型 1.8 秒、语音 0.6 秒
+  state.clock += 100_000;
+  calls.logs.length = 0;
+  state.delayMs = 1800;
+  state.ttsDelayMs = 600;
+  const broke = { at: state.clock - 500, map, lostCombo: 412, fcLost: true, timeMs: 102_400, progress: 0.63, n100: 18, n50: 1, miss: 2, combo: 0, peakCombo: 412, pp: 241.4 };
+  assert.equal((await service.handleEvent(event('combo-break', broke))).said, true);
+  const when = after('[osu] 说了（断连，念了）：LINE');
+  for (const want of ['断了 412 combo，FC 没了', 'SONG_TITLE [Insane] +HD', '谱面 1:42（63%）', '97.42%', '连击 0（最高 412 / 800）', '100×18 50×1 miss×2', '241pp', '事件后 2.9 秒说出', '模型 MODEL 1.8 秒（输入 100 / 输出 5 token）', '语音 0.6 秒']) {
+    assert.ok(when.includes(want), `「当时」缺「${want}」：${when}`);
+  }
+
+  // 马上又断：离上一句太近，不说，日志写原因和当时的数
+  state.delayMs = 0;
+  state.ttsDelayMs = 0;
+  await service.handleEvent(event('combo-break', { ...broke, at: state.clock, lostCombo: 300, fcLost: false, timeMs: 110_000 }));
+  assert.ok(calls.logs.some((l) => l.startsWith('[osu] 没说（断连）：离上一句太近｜断了 300 combo｜') && l.includes('谱面 1:50')), logs());
+
+  // 写太久：过时丢掉，日志里说清楚（以前悄悄丢掉、日志里什么都没有）
+  state.clock += 100_000;
+  state.delayMs = 20_000;
+  await service.handleEvent(event('combo-break', { ...broke, at: state.clock, lostCombo: 500, fcLost: false }));
+  assert.ok(calls.logs.some((l) => l.startsWith('[osu] 没说成（断连）：写了 20.0 秒，超过 16 秒就过时了，丢掉：LINE')), logs());
+  const dropped = after('[osu] 没说成（断连）：写了');
+  assert.ok(dropped.includes('事件后 20.0 秒｜') && !dropped.includes('说出'), dropped);
+
+  // 多人房名次：日志里不写别人的名字
+  state.delayMs = 0;
+  state.clock += 100_000;
+  state.reply = '超过「RIVAL_A」了，RIVAL_A 慌了吧';
+  await service.handleEvent(event('rank-up', { at: state.clock, map, from: 3, to: 1, players: 8, names: ['RIVAL_A'] }));
+  assert.ok(calls.logs.some((l) => l.startsWith('[osu] 说了（超人，念了）：超过「对方」了，对方 慌了吧')), `她的话里提到的名字换成「对方」：${logs()}`);
+  assert.ok(after('[osu] 说了（超人').includes('多人房第 3 → 第 1（8 人）'), logs());
+  state.reply = 'LINE';
+  // 念出来开着但没合成出来：「当时」里写原因，不写像是念了的时长
+  state.clock += 100_000;
+  state.tts = Object.assign(new Error('火山拒绝了密钥'), { code: 'tts.auth' });
+  await service.handleEvent(event('break', { at: state.clock, map }));
+  assert.ok(after('[osu] 说了（休息段）：LINE').includes('语音没念出来（火山拒绝了密钥（tts.auth），等了 0.0 秒）'), logs());
+  state.tts = { bytes: Buffer.from('RIFF_FAKE_WAV'), durationMs: 1800 };
+  // 一局结束、重开、回放
+  state.clock += 100_000;
+  await service.handleEvent(event('finish', { at: state.clock, map, rank: 'A', pp: 151, progress: 1, fullCombo: false, timeMs: 180_000 }));
+  assert.ok(calls.logs.some((l) => l.startsWith('[osu] 一局结束：打完，评级 A｜SONG_TITLE [Insane] +HD｜谱面 3:00（100%）')), logs());
+  await service.handleEvent(event('retry', { at: state.clock, map, retries: 2, before: { progress: 0.4, miss: 3 } }));
+  assert.ok(calls.logs.includes('[osu] 重开：第 2 次重开（上一把打到 40%，miss×3）｜SONG_TITLE [Insane] +HD｜4.83 星｜BPM 180｜AR 9.3｜CS 4｜800 combo'), logs());
+  await service.handleEvent(event('finish', { at: state.clock, map, replay: true, rank: 'S', progress: 1 }));
+  assert.ok(calls.logs.some((l) => l.startsWith('[osu] 一局结束：打完，评级 S') && l.endsWith('｜回放 / 观战')), logs());
+  assert.ok(!calls.logs.some((l) => l.startsWith('[osu] 没说（打完）') && l.includes('评级 S')), '回放不说话本来就该这样，不写「没说」');
+
+  // 人设、小结、别人的名字都不进日志
+  for (const secret of ['PERSONA_TEXT', 'MEMORY_TEXT', 'OWNER_NAME', 'RIVAL_A']) assert.ok(!logs().includes(secret), `日志里不该有 ${secret}`);
+  fs.rmSync(PLAYS, { force: true });
+}
+{
+  // 点「试一句」的时候正好打完一把：结束的那件事排着，试完马上接着说（复核发现：原来要等到下一件事才说）
+  fs.rmSync(PLAYS, { force: true });
+  const { state, calls, service } = harness();
+  let fired = false;
+  state.onComplete = async () => {
+    if (fired) return;
+    fired = true;
+    const queued = await service.handleEvent(event('finish', { at: state.clock, rank: 'B', pp: 80, progress: 1 }));
+    assert.equal(queued.reason, 'queued');
+  };
+  state.reply = (n) => (n === 1 ? 'TEST_LINE' : 'FINISH_LINE');
+  await service.act({ action: 'test' });
+  for (let i = 0; i < 20 && calls.subtitles.length < 2; i += 1) await tick();
+  assert.deepEqual(calls.subtitles.map((s) => s.text), ['TEST_LINE', 'FINISH_LINE'], calls.logs.join('\n'));
+  assert.ok(calls.logs.some((l) => l.startsWith('[osu] 说了（试一句）：TEST_LINE')), calls.logs.join('\n'));
+  assert.ok(calls.logs.some((l) => l.startsWith('[osu] 排着（打完）：')), calls.logs.join('\n'));
+  fs.rmSync(PLAYS, { force: true });
+}
+
 // ── 3. 开口和闭嘴 ────────────────────────────────────────────────────────────
 {
   fs.rmSync(PLAYS, { force: true });

@@ -180,6 +180,8 @@ export function createOsuTracker({ comboBreakMin = 50 } = {}) {
     multi: run.multi,
     retries: run.retries,
     progress: run.progress,
+    // 谱面里打到第几毫秒（日志里写「谱面 1:42」，和难段预告的时间对得上）
+    timeMs: Number.isFinite(run.map?.timeLive) ? run.map.timeLive : null,
     acc: run.acc,
     miss: run.miss,
     n100: run.n100,

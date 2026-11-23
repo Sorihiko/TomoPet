@@ -23,6 +23,7 @@ import { mouthTrackFromText, mouthTrackFromWav } from './speakable.js';
 import { createHeadsUp } from './heads-up.js';
 import { createMapInfo, mapInfoText } from './map-info.js';
 import { curveFromGraph } from './strain-curve.js';
+import { contextOf, detailOf, hideNames, seconds, startLine, timingOf } from './play-log.js';
 
 const PLAYS_KEEP = 60;
 /** 模型写一句话用了这么久还没回来，打图中的话就算过时了。 */
@@ -52,6 +53,7 @@ export const SKIP_TEXT = {
   'start-same-map': '这张图十分钟内已经开局点评过',
   'daily-limit': '今天说够了',
   busy: '她正在说上一句',
+  replaced: '排着的时候又来了一件结束的事，只说最新的那件',
 };
 /**
  * 一段连击相对这张图够不够长：至少 floor，而且至少是这张图总连击数的 15%。
@@ -232,6 +234,7 @@ export function unitizeCombo(line, event) {
 const END_KINDS = new Set(['finish', 'fail', 'quit']);
 /** 日志里写「说了（断连）：……」用的名字（2026-11-22 用户：「有没有办法看别人桌宠说了什么」）。 */
 const KIND_LABEL = { start: '开局', combo: '连击关口', 'combo-break': '断连', 'acc-drop': '掉准度', break: '休息段', 'rank-up': '超人', 'rank-down': '被超', retry: '重开', finish: '打完', fail: '失败', quit: '退出', test: '试一句' };
+const kindLabelOf = (event) => (event?.test ? KIND_LABEL.test : KIND_LABEL[event?.kind] || String(event?.kind ?? ''));
 // 「气泡没地方出」的几种错：桌面角色打开 / OBS 角色装好以后就不成立了。
 const BUBBLE_BLOCKED = new Set(['osu.pet-hidden', 'osu.pet-unavailable']);
 
@@ -414,10 +417,15 @@ export function createOsuWatchService({ config, persona, llm, tts = null, overla
     return `${head.join('')}…`;
   }
 
-  /** 记一笔「这件事没说，因为……」：只在内存里留最近 12 条，不落盘。回放、刚开打就退出这种不值得提的不记。 */
-  function noteSkip(event, reason, now) {
+  /**
+   * 记一笔「这件事没说，因为……」：内存里留最近 12 条（设置窗口看），日志里也写一行（带当时的成绩）。
+   * 回放、刚开打就退出这种不值得提的不记（开局 / 一局结束那两行已经写了）。
+   * line：写好了但没说出去的那句（写的几秒里打到了难段前后）。
+   */
+  function noteSkip(event, reason, now, line = '') {
     if (reason === 'replay' || reason === 'quit-early' || reason === 'retry-not-marked' || reason === 'pose-only') return;
     skipped = [...skipped, { at: now, kind: event.kind, reason, why: SKIP_TEXT[reason] || reason, lostCombo: event.lostCombo ?? null, maxCombo: event.map?.maxCombo ?? null, sliderBreak: event.sliderBreak === true }].slice(-12);
+    log(`[osu] 没说（${kindLabelOf(event)}）：${SKIP_TEXT[reason] || reason}${line ? `，写好的这句没说：${line}` : ''}｜${contextOf(event)}`);
   }
 
   /** 这个事件要不要说。返回 null 表示说；否则是不说的原因。 */
@@ -508,20 +516,33 @@ export function createOsuWatchService({ config, persona, llm, tts = null, overla
     const startedAt = d.now();
     const seqAtStart = endSeq;
     const during = !END_KINDS.has(event.kind);
+    const kindLabel = kindLabelOf(event);
+    // 日志里「当时」那一行：这件事、当时的成绩、从事件到说出来过了多久、模型和语音各用了多久（2026-11-23 用户要的）
+    let result = null;
+    let llmMs = null;
+    let ttsMs = null;
+    let ttsFail = null;
+    const logWhen = (extra = {}) => log(`[osu]   当时：${[contextOf(event), timingOf({ eventAt: event.at, saidAt: d.now(), llmMs, ttsMs, ttsFail, model: result?.model, input: result?.usage?.input, output: result?.usage?.output, ...extra })].filter(Boolean).join('｜')}`);
+    // 多人房超人 / 被超时模型拿到了对方的名字，写出来的话里可能带着：进日志前换成「对方」（日志里不写别人的名字）
+    const forLog = (text) => hideNames(text, event.names);
     try {
       if (wcfg.output === 'bubble' && !petVisible() && !counterShowing()) await locateCounter();
       preflight(wcfg);
       const prompt = buildPrompt(event);
-      const result = await llm.complete({ system: prompt.system, user: prompt.user, maxTokens: 200 });
+      const llmStart = d.now();
+      result = await llm.complete({ system: prompt.system, user: prompt.user, maxTokens: 200 });
+      llmMs = d.now() - llmStart;
       recordUsage(result, d.now());
       const line = unitizeCombo(shape(result.text, prompt.maxChars), event);
-      const kindLabel = KIND_LABEL[event.kind] || event.kind;
       if (!line) {
-        log(`[osu] 没说成（${kindLabel}）：模型回的话整理后是空的（原话：${JSON.stringify(String(result.text).slice(0, 80))}）`);
+        log(`[osu] 没说成（${kindLabel}）：模型回的话整理后是空的（原话：${JSON.stringify(forLog(String(result.text).slice(0, 80)))}）`);
+        logWhen({ dropped: true });
         return { ok: false, reason: 'empty' };
       }
       // 念出来：合成不出来（没配 / 超时 / 报错）就只出字，不为了声音把这句话丢掉。
+      const ttsStart = d.now();
       const { voice, failure } = await synthesizeVoice(line, wcfg);
+      if (wcfg.voice) { ttsMs = d.now() - ttsStart; ttsFail = failure; }
       // 字有没有地方显示：字幕；或者气泡模式下桌面 / OBS 里有一个角色看得见。
       const shown = wcfg.output === 'subtitle' || (wcfg.output === 'bubble' && (petVisible() || counterShowing()));
       const lostHint = wcfg.output === 'none' ? '「不显示字幕」时没声音这句就没了。' : '桌面角色藏着、OBS 里的角色也没装好，没声音这句就没了。';
@@ -531,15 +552,22 @@ export function createOsuWatchService({ config, persona, llm, tts = null, overla
       // 没合成出声音，字又没地方显示（不出字；或者气泡模式下桌面和 OBS 的角色都看不见）：这句话没法让你知道，算没说。
       if (!voice && !shown) {
         lastError = voiceError ? { ...voiceError } : { code: 'osu.voice-failed', error: '这一句没念出来', hint: '到设置「语音」里点「试听」看能不能出声。', at: new Date(d.now()).toISOString() };
-        log(`[osu] 没说成（${lastError.code}，字没地方显示又没声音）`);
+        log(`[osu] 没说成（${kindLabel}，${lastError.code}，字没地方显示又没声音）：${forLog(line)}`);
+        logWhen({ dropped: true });
         return { ok: false, reason: 'no-voice' };
       }
       const now = d.now();
       // 打图中的话过时了就不说：模型或语音合成慢了，或者这一把已经结束了。要念出来时多给几秒。
-      if (during && (now - startedAt > (wcfg.voice ? STALE_VOICE_MS : STALE_MS) || endSeq !== seqAtStart)) return { ok: false, reason: 'stale' };
+      const staleMs = wcfg.voice ? STALE_VOICE_MS : STALE_MS;
+      if (during && (now - startedAt > staleMs || endSeq !== seqAtStart)) {
+        const why = endSeq !== seqAtStart ? '写好时这一把已经结束了' : `写了 ${seconds(now - startedAt)}，超过 ${staleMs / 1000} 秒就过时了`;
+        log(`[osu] 没说成（${kindLabel}）：${why}，丢掉：${forLog(line)}`);
+        logWhen({ dropped: true });
+        return { ok: false, reason: 'stale' };
+      }
       // 写这一句的几秒里打到了难段前后（难段预告开着）：不说了，免得撞上提示音、或者在难的地方插嘴（复核发现：闸门那一刻还不在，写完时已经在了）。
       // 开局和休息段那两句和闸门一样不压。
-      if (during && event.kind !== 'start' && event.kind !== 'break' && safe(() => headsUp.quiet(now), false)) { noteSkip(event, 'heads-up-quiet', now); return { ok: false, reason: 'heads-up-quiet' }; }
+      if (during && event.kind !== 'start' && event.kind !== 'break' && safe(() => headsUp.quiet(now), false)) { noteSkip(event, 'heads-up-quiet', now, forLog(line)); return { ok: false, reason: 'heads-up-quiet' }; }
       const chars = Array.from(line).length;
       const talkMs = Math.round(voice && voice.durationMs > 0 ? voice.durationMs : talkMsFor(line));
       // 嘴怎么动：有声音按声音的响度，没有就按字数假装说（皮肤有张嘴图时用得上，没有的皮肤忽略它）。
@@ -559,7 +587,8 @@ export function createOsuWatchService({ config, persona, llm, tts = null, overla
         const counterError = safe(() => counter?.status?.().lastError, null);
         lastError = counterError?.code ? { ...counterError, at: new Date(d.now()).toISOString() } : { code: 'osu.bubble-nowhere', error: '这一句气泡哪边都没显示出来', hint: '看设置「角色」和「OBS」那两块的提示。', at: new Date(d.now()).toISOString() };
         delete lastError.ok;
-        log(`[osu] 没说成（${lastError.code}，气泡哪边都没显示出来）`);
+        log(`[osu] 没说成（${kindLabel}，${lastError.code}，气泡哪边都没显示出来）：${forLog(line)}`);
+        logWhen({ dropped: true });
         return { ok: false, reason: lastError.code };
       }
       lastSaidAt = now;
@@ -572,14 +601,16 @@ export function createOsuWatchService({ config, persona, llm, tts = null, overla
       // 每一句都记进日志（只在本机）：别人的桌宠说话不对劲时，让他把 osu-pet.log 发过来就能看到她说了什么。
       // 整理过（截短、换写法）的话后面带上模型原话
       const raw = String(result.text).trim();
-      log(`[osu] 说了（${kindLabel}${voice ? '，念了' : ''}）：${line}${raw && raw !== line ? `（模型原话：${raw.slice(0, 80)}）` : ''}`);
+      log(`[osu] 说了（${kindLabel}${voice ? '，念了' : ''}）：${forLog(line)}${raw && raw !== line ? `（模型原话：${forLog(raw.slice(0, 80))}）` : ''}`);
+      logWhen();
       lastError = null;
       persist();
       return { ok: true, text: line };
     } catch (error) {
       lastError = { ...failureOf(error, '看日志里 [osu] 开头的行。'), at: new Date(d.now()).toISOString() };
       delete lastError.ok;
-      log(`[osu] 没说成（${lastError.code}）：${lastError.error}`);
+      log(`[osu] 没说成（${kindLabel}，${lastError.code}）：${lastError.error}`);
+      try { logWhen({ dropped: true }); } catch {}
       return { ok: false, reason: lastError.code };
     }
   }
@@ -631,6 +662,10 @@ export function createOsuWatchService({ config, persona, llm, tts = null, overla
     }
     if (END_KINDS.has(event.kind)) endSeq += 1;
     if (END_KINDS.has(event.kind) && !event.replay && (event.kind !== 'quit' || event.progress >= 0.1)) recordPlay(event);
+    // 每一局的开头和结尾各一行：日志能一局一局地读（2026-11-23 用户要的）
+    if (event.kind === 'start') log(`[osu] 开局：${startLine(event)}`);
+    else if (event.kind === 'retry') log(`[osu] 重开：${detailOf(event)}｜${startLine({ ...event, retries: 0 })}`);
+    else if (END_KINDS.has(event.kind)) log(`[osu] 一局结束：${contextOf(event)}${event.replay ? '｜回放 / 观战' : ''}`);
     // 先换姿势、再过说话的闸门：断连了就该露出「呜哇」的样子，哪怕这一下她没说话。
     react(event, now);
     const reason = gate(event, wcfg, now);
@@ -641,7 +676,9 @@ export function createOsuWatchService({ config, persona, llm, tts = null, overla
     if (busy) {
       // 正在写上一句：打图中的事就算了；结束的事排着（只留最新的一个）。
       if (!END_KINDS.has(event.kind)) { noteSkip(event, 'busy', now); return { said: false, reason: 'busy' }; }
+      if (pendingEnd) noteSkip(pendingEnd, 'replaced', now);
       pendingEnd = event;
+      log(`[osu] 排着（${kindLabelOf(event)}）：她正在说上一句，说完接着说`);
       return { said: false, reason: 'queued' };
     }
     busy = true;
@@ -843,13 +880,15 @@ export function createOsuWatchService({ config, persona, llm, tts = null, overla
     if (action === 'test') {
       // 用一把假的成绩走完整条链路（过闸除外）：验证「模型写得出 + 显示 / 念得出来」。不记进成绩和小结。
       const event = {
-        kind: 'finish', at: d.now(), replay: false, retries: 0, progress: 1, acc: 97.42, miss: 2, combo: 0, peakCombo: 486, rank: 'A', pp: 0, fullCombo: false,
+        kind: 'finish', test: true, at: d.now(), replay: false, retries: 0, progress: 1, acc: 97.42, miss: 2, combo: 0, peakCombo: 486, rank: 'A', pp: 0, fullCombo: false,
         mods: '', map: { title: '（试一下）', artist: '', version: 'Insane', stars: 4.8, maxCombo: 812 },
       };
       if (busy) throw codedError('osu.busy', '她正在说上一句', '等几秒再点。');
       busy = true;
       let result;
       try { result = await say(event, watchOf()); } finally { busy = false; }
+      // 试的时候正好打完一把：那件结束的事排着，试完接着说（不然要等到下一件事才说，日志里「说完接着说」就不对了）
+      if (pendingEnd) void drain(watchOf());
       if (!result.ok) throw codedError(lastError?.code || 'osu.test-failed', lastError?.error || '没说出来', lastError?.hint || '看上面的状态里哪一项不对。');
       extra = { said: result.text };
     } else if (action === 'counter-sync') {
