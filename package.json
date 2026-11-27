@@ -1,7 +1,7 @@
 {
   "name": "tomopet",
   "productName": "TomoPet",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "TomoPet：看你打 osu! 的桌宠——连 tosu，在关键时刻说一句（本地字幕 / 语音 / 桌面角色 / OBS 叠加）",
   "type": "module",
