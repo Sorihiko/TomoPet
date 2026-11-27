@@ -44,6 +44,17 @@ const all = (re) => [...html.matchAll(re)].map((m) => m[1]);
   const sections = new Set([...fs.readFileSync(path.join(ROOT, 'core', 'next-step.js'), 'utf8').matchAll(/add\('(?:error|warn|info)', '([a-z]+)'/g)].map((m) => m[1]));
   const map = JSON.parse(/const PAGE_OF_SECTION = (\{[^}]+\});/.exec(js)[1].replace(/(\w+):/g, '"$1":').replace(/'/g, '"'));
   for (const section of sections) assert.ok(pages.includes(map[section]), `「下一步」的 ${section} 跳不到页`);
+  // 二级页「她最近说的」（2026-11-27）：不在左边页签里、一开始藏着；从总览的气泡和「最近没说的」进来，能回总览
+  assert.ok(/<section class="page sub-page" data-page="said" id="said" hidden>/.test(html), '二级页 said');
+  assert.ok(!navPages.includes('said'), '不占左边的页签');
+  assert.ok(js.includes("const SUB_PAGES = { said: 'overview' };"), 'settings.js 认得二级页，左边亮「总览」');
+  for (const id of ['said-list', 'said-skipped', 'said-count', 'said-more']) assert.ok(html.includes(`id="${id}"`), `缺 #${id}`);
+  assert.ok((html.match(/href="#said"/g) || []).length >= 2, '总览上有两个入口');
+  assert.ok(html.includes('href="#overview" class="back"'), '能回总览');
+  assert.ok(html.includes('data-call="said.clear"') && js.includes("call('said.replay'"), '清空、再听一遍');
+  // 「提到你时用」能自己写（2026-11-27：「可以叫我大狗」）：存的是输入框，下拉框帮着填
+  assert.ok(/<select id="pronoun-pick"[^>]*>.*<option value="custom">自定义…<\/option><\/select>/.test(html), '下拉框有「自定义…」');
+  assert.ok(/<input type="text" maxlength="10" id="pronoun-custom" data-cfg="persona.ownerPronoun"/.test(html), '自定义的输入框存 persona.ownerPronoun');
 }
 
 // ── 离屏自检和外面用到的元素都在；样式是深色 ──────────────────────────────────

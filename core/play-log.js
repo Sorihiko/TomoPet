@@ -65,9 +65,14 @@ function hits(event) {
   return parts.join(' ');
 }
 
+/** 这一刻的成绩（不带图名）：位置、准度、连击、100 / 50 / miss、pp。 */
+export function statsOf(event = {}) {
+  return [position(event), acc(event.acc), combo(event), hits(event), pp(event.pp)].filter(Boolean).join('｜');
+}
+
 /** 这一刻的成绩：图、位置、准度、连击、100 / 50 / miss、pp。 */
 export function stateOf(event = {}) {
-  return [mapName(event), position(event), acc(event.acc), combo(event), hits(event), pp(event.pp)].filter(Boolean).join('｜');
+  return [mapName(event), statsOf(event)].filter(Boolean).join('｜');
 }
 
 /** 这件事本身：断了多少、过了哪个关口、名次从几到几…… */

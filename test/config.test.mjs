@@ -24,11 +24,24 @@ assert.ok(!store.dataDir().includes('.dsh'), '不碰 ~/.dsh');
   assert.deepEqual([cfg.persona.ownerPronoun, cfg.counter.enabled, cfg.pet.enabled, cfg.pet.skin], ['他', true, true, 'crosspet-deepseek']);
   const odd = normalizeConfig({
     watch: { enabled: 'yes', url: 'ws://evil.example/x', output: 'hologram', minGapSec: 1, perSongMax: 99, dailyLimit: -5, midPlay: false, voice: 'yes' },
-    persona: { name: '  ', ownerPronoun: '它' }, pet: { scale: 9, skin: '../../etc' }, llm: { provider: 'gpt', baseUrl: 'ftp://x' }, tts: { speaker: 'S_abc; rm -rf' }, rulers: 'nope',
+    persona: { name: '  ', ownerPronoun: '两行\n不行' }, pet: { scale: 9, skin: '../../etc' }, llm: { provider: 'gpt', baseUrl: 'ftp://x' }, tts: { speaker: 'S_abc; rm -rf' }, rulers: 'nope',
   });
   assert.deepEqual([odd.watch.enabled, odd.watch.url, odd.watch.output, odd.watch.minGapSec, odd.watch.perSongMax, odd.watch.dailyLimit, odd.watch.midPlay, odd.watch.voice], [true, 'ws://127.0.0.1:24050/websocket/v2', DEFAULTS.watch.output, 10, 10, 1, false, DEFAULTS.watch.voice], '乱填的值收敛回安全范围（不认识的回到默认值）；别的机器的地址不认');
   assert.deepEqual([odd.persona.name, odd.persona.ownerPronoun, odd.pet.scale, odd.pet.skin, odd.llm.provider, odd.llm.baseUrl, odd.tts.speaker], ['小鲸鱼', '他', 1.5, 'crosspet-deepseek', 'openai', DEFAULTS.llm.baseUrl, '']);
   assert.deepEqual(odd.rulers, DEFAULTS.rulers);
+  // 「提到你时用」可以自己写（2026-11-27：「可以叫我大狗」）：一行、最多 10 个字，空的回到「他」
+  for (const [given, want] of [['大狗', '大狗'], [' 你 ', '他'], ['我', '他'], [' 大狗 ', '大狗'], ['TA', 'TA'], ['', '他'], ['   ', '他'], ['一二三四五六七八九十十一', '一二三四五六七八九十'], [42, '他']]) {
+    assert.equal(normalizeConfig({ persona: { ownerPronoun: given } }).persona.ownerPronoun, want, JSON.stringify(given));
+  }
+  // 在设置里填「你」「我」、带 Tab 的：拒绝，并说清楚为什么（不是「只能有字母、数字……」那句）
+  {
+    const cfgStore = createConfigStore();
+    assert.throws(() => cfgStore.save({ persona: { ownerPronoun: '你' } }), (error) => error.code === 'config.invalid' && error.hint.includes('「你」是她自己') && error.hint.includes('大狗'));
+    assert.throws(() => cfgStore.save({ persona: { ownerPronoun: '大\t狗' } }), (error) => error.hint === '只能写一行，不能有换行或 Tab。');
+    cfgStore.save({ persona: { ownerPronoun: '大狗' } });
+    assert.equal(cfgStore.get().persona.ownerPronoun, '大狗');
+    cfgStore.save({ persona: { ownerPronoun: '他' } });
+  }
   assert.deepEqual(normalizeConfig(null).watch, DEFAULTS.watch);
   for (const out of ['subtitle', 'bubble', 'none']) assert.equal(normalizeConfig({ watch: { output: out } }).watch.output, out);
   assert.equal(isLocalTosuUrl('ws://localhost:1234/websocket/v2'), true);

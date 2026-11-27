@@ -67,7 +67,13 @@ const SCHEMA = {
   persona: {
     name: { type: 'string', max: 40, nonEmpty: true },
     ownerName: { type: 'string', max: 40, nonEmpty: true },
-    ownerPronoun: { type: 'enum', values: ['他', '她', 'TA'] },
+    // 他 / 她 / TA，也可以自己写（2026-11-27：「这个也想自定义」「可以叫我大狗」）；一行、不超过 10 个字，空的当「他」
+    // 「你」「我」不行（复核发现）：提示词里「你」是她自己，「看你打 osu」「对你说一句」就成了她在打；小结里也会写成「看你打」
+    ownerPronoun: {
+      type: 'string', max: 10, nonEmpty: true, pattern: /^[^\r\n\t]+$/, patternHint: '只能写一行，不能有换行或 Tab。',
+      reserved: ['你', '您', '我', '咱', '俺', '自己'],
+      reservedHint: '「你」「我」会和她自己的说法混在一起（在她的提示词里「你」是她自己）。写个第三人称的叫法，比如「大狗」或你的名字；想让她当面叫你什么，改上面的「她怎么称呼你」。',
+    },
   },
   llm: {
     provider: { type: 'enum', values: ['openai', 'anthropic'] },
@@ -158,6 +164,7 @@ function coerce(spec, value, fallback) {
       const text = value.trim().slice(0, spec.max);
       if (spec.nonEmpty && !text) return fallback;
       if (spec.pattern && !spec.pattern.test(text)) return fallback;
+      if (spec.reserved && spec.reserved.includes(text)) return fallback;
       return text;
     }
     case 'secret': return isPlainObject(value) || typeof value === 'string' ? value : fallback;
@@ -286,7 +293,8 @@ export function createConfigStore({ secretBox = plainSecretBox, now = Date.now }
         const text = value.trim();
         if (text.length > spec.max) bad(`最多 ${spec.max} 个字。`);
         if (spec.nonEmpty && !text) bad('不能是空的。');
-        if (spec.pattern && !spec.pattern.test(text)) bad('只能有字母、数字、下划线、点和连字符。');
+        if (spec.pattern && !spec.pattern.test(text)) bad(spec.patternHint || '只能有字母、数字、下划线、点和连字符。');
+        if (spec.reserved && spec.reserved.includes(text)) bad(spec.reservedHint || `不能是「${text}」。`);
         return text;
       }
       case 'secret':

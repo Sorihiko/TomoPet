@@ -292,6 +292,25 @@ export async function runSmoke({ outDir, app, BrowserWindow, openSettings, pet, 
     return { ...info, shot: top, bottomShot: bottom };
   });
 
+  // 二级页「她最近说的」和自己写的称呼（2026-11-27）：从总览气泡点进去，看列表和「再听一遍」；人设页的「自定义…」
+  await step('said-page', async () => {
+    const win = openSettings({ quiet: true });
+    await win.webContents.executeJavaScript(`location.hash = '#overview'; window.__refresh && window.__refresh(); 0`);
+    await wait(700);
+    await win.webContents.executeJavaScript(`document.getElementById('said-more').click(); 0`);
+    await wait(700);
+    const info = await win.webContents.executeJavaScript(`({ hash: location.hash, visible: [...document.querySelectorAll('main > .page')].filter((s) => !s.hidden).map((s) => s.dataset.page), active: [...document.querySelectorAll('#pages-nav a.active')].map((a) => a.dataset.page), lines: [...document.querySelectorAll('#said-list .said-text')].map((n) => n.textContent), ctx: [...document.querySelectorAll('#said-list .said-ctx')].map((n) => n.textContent), replay: document.querySelectorAll('#said-list .said-replay').length, count: document.getElementById('said-count').textContent })`);
+    const shotSaid = await shot(win, 'settings-said');
+    await win.webContents.executeJavaScript(`window.api.call('config.save', { patch: { persona: { ownerPronoun: '大狗' } } }).then(() => window.__refresh()); location.hash = '#persona'; 0`);
+    await wait(700);
+    const pronoun = await win.webContents.executeJavaScript(`({ pick: document.getElementById('pronoun-pick').value, custom: document.getElementById('pronoun-custom').value, customHidden: document.getElementById('pronoun-custom').hidden })`);
+    const shotPersona = await shot(win, 'settings-persona-pronoun');
+    await win.webContents.executeJavaScript(`window.api.call('config.save', { patch: { persona: { ownerPronoun: '他' } } }).then(() => window.__refresh()); 0`);
+    await wait(500);
+    const back = await win.webContents.executeJavaScript(`({ pick: document.getElementById('pronoun-pick').value, customHidden: document.getElementById('pronoun-custom').hidden })`);
+    return { ...info, pronoun, back, shot: shotSaid, personaShot: shotPersona };
+  });
+
   // OBS 那一页：假 tosu（临时目录 + 本机网页服务），真的装一遍 counter，再用浏览器窗口打开。
   await step('counter', async () => {
     const tosuDir = fs.mkdtempSync(path.join(os.tmpdir(), 'osu-pet-smoke-游戏用-'));

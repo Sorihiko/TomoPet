@@ -23,9 +23,12 @@ import { mouthTrackFromText, mouthTrackFromWav } from './speakable.js';
 import { createHeadsUp } from './heads-up.js';
 import { createMapInfo, mapInfoText } from './map-info.js';
 import { curveFromGraph } from './strain-curve.js';
-import { contextOf, detailOf, hideNames, seconds, startLine, timingOf } from './play-log.js';
+import { contextOf, detailOf, hideNames, mapName, seconds, startLine, statsOf, timingOf } from './play-log.js';
 
 const PLAYS_KEEP = 60;
+/** 「她最近说的」留多少句（存在 plays.json 里）、其中多少句留着声音可以再听一遍（只在内存里）。 */
+const LINES_KEEP = 100;
+const VOICES_KEEP = 20;
 /** 模型写一句话用了这么久还没回来，打图中的话就算过时了。 */
 export const STALE_MS = 9000;
 /** 要念出来时还得等语音合成：多给几秒。 */
@@ -297,13 +300,22 @@ export function createOsuWatchService({ config, persona, llm, tts = null, overla
   let session = { startedAt: 0, lastAt: 0, plays: [] };
   const usage = { day: '', calls: 0, input: 0, output: 0 };
   let store = readPlays();
+  // 总览气泡里的「上一句」：重开程序后接着显示存下来的最后一句（复核发现：原来重开后气泡是空的，旁边的列表里却有 100 句）
+  {
+    const tail = store.lines.at(-1);
+    if (tail) lastComment = { at: tail.at, kind: tail.kind, ...(tail.test ? { test: true } : {}), text: tail.text, voiced: Boolean(tail.voiced) };
+  }
+  // 最近几句的声音（只在内存里，重开程序就没了）：设置窗口「她最近说的」里点「再听一遍」用
+  const voices = new Map();
+  let lineSeq = 0;
 
   function readPlays() {
     try {
       const value = JSON.parse(fs.readFileSync(d.playsFile(), 'utf8'));
-      if (value?.version === 1 && Array.isArray(value.items)) return { items: value.items, said: isPlainObject(value.said) ? value.said : {} };
+      const lines = Array.isArray(value?.lines) ? value.lines.filter((line) => isPlainObject(line) && typeof line.text === 'string' && typeof line.id === 'string') : [];
+      if (value?.version === 1 && Array.isArray(value.items)) return { items: value.items, said: isPlainObject(value.said) ? value.said : {}, lines: lines.slice(-LINES_KEEP) };
     } catch {}
-    return { items: [], said: {} };
+    return { items: [], said: {}, lines: [] };
   }
 
   function persist() {
@@ -311,7 +323,7 @@ export function createOsuWatchService({ config, persona, llm, tts = null, overla
       const file = d.playsFile();
       const days = Object.keys(store.said).sort().slice(-7);
       const tmp = `${file}.${process.pid}.tmp`;
-      fs.writeFileSync(tmp, `${JSON.stringify({ version: 1, items: store.items.slice(-PLAYS_KEEP), said: Object.fromEntries(days.map((day) => [day, store.said[day]])) }, null, 2)}\n`, { mode: 0o600 });
+      fs.writeFileSync(tmp, `${JSON.stringify({ version: 1, items: store.items.slice(-PLAYS_KEEP), said: Object.fromEntries(days.map((day) => [day, store.said[day]])), lines: store.lines.slice(-LINES_KEEP) }, null, 2)}\n`, { mode: 0o600 });
       fs.renameSync(tmp, file);
     } catch (error) { log('[osu] 写记录失败：', String(error?.message ?? error).slice(0, 120)); }
   }
@@ -597,12 +609,23 @@ export function createOsuWatchService({ config, persona, llm, tts = null, overla
       else if (during) song.said += 1;
       store.said[dayKey(now)] = saidToday(now) + 1;
       recentLines = [...recentLines, line].slice(-8);
-      lastComment = { at: now, kind: event.kind, text: line, voiced: Boolean(voice) };
+      lastComment = { at: now, kind: event.kind, ...(event.test ? { test: true } : {}), text: line, voiced: Boolean(voice) };
       // 每一句都记进日志（只在本机）：别人的桌宠说话不对劲时，让他把 osu-pet.log 发过来就能看到她说了什么。
       // 整理过（截短、换写法）的话后面带上模型原话
       const raw = String(result.text).trim();
       log(`[osu] 说了（${kindLabel}${voice ? '，念了' : ''}）：${forLog(line)}${raw && raw !== line ? `（模型原话：${forLog(raw.slice(0, 80))}）` : ''}`);
       logWhen();
+      // 「她最近说的」（设置窗口的二级页，2026-11-27：「有的时候说怪话我没听清」）：字和当时的成绩存下来，声音在内存里留最近 20 句
+      lineSeq += 1;
+      const id = `${now.toString(36)}-${lineSeq}`;
+      store.lines = [...store.lines, {
+        id, at: now, kind: event.kind, ...(event.test ? { test: true } : {}), text: line, ...(raw && raw !== line ? { raw: raw.slice(0, 200) } : {}),
+        voiced: Boolean(voice), map: event.test ? '' : mapName(event), detail: event.test ? '用一把假成绩试的' : detailOf(event), stats: event.test ? '' : statsOf(event),
+      }].slice(-LINES_KEEP);
+      if (voice) {
+        voices.set(id, { bytes: voice.bytes, durationMs: voice.durationMs, text: line });
+        while (voices.size > VOICES_KEEP) voices.delete(voices.keys().next().value);
+      }
       lastError = null;
       persist();
       return { ok: true, text: line };
@@ -864,6 +887,8 @@ export function createOsuWatchService({ config, persona, llm, tts = null, overla
       mapInfo: safe(() => mapInfo.status(), null),
       today: { said: saidToday(now), limit: wcfg.dailyLimit, llmCalls: usage.day === dayKey(now) ? usage.calls : 0, tokens: usage.day === dayKey(now) ? usage.input + usage.output : 0 },
       lastComment,
+      // 她最近说的（最新在前）：设置窗口「她最近说的」那一页；canReplay = 声音还在，可以再听一遍
+      said: [...store.lines].reverse().map((item) => ({ ...item, canReplay: voices.has(item.id) })),
       // 最近没说的事和原因（最新在前）：「为什么那一下她没反应」直接看这里。
       skipped: [...skipped].reverse(),
       // 「气泡没地方出」的错已经不成立了（桌面角色打开了 / OBS 角色装好了）：不再挂着，免得和新的提示互相矛盾。
@@ -897,10 +922,21 @@ export function createOsuWatchService({ config, persona, llm, tts = null, overla
       if (!r.ok) throw codedError(r.code, r.error, r.hint);
       extra = { counterSynced: r };
     } else if (action === 'clear-plays') {
-      store = { items: [], said: store.said };
+      store = { ...store, items: [] };
+      persist();
+    } else if (action === 'replay') {
+      // 「再听一遍」：把那句存着的声音再放一次（只出声，不重新调模型、不算进今天说的句数）
+      const kept = voices.get(String(body.id ?? ''));
+      if (!kept) throw codedError('osu.replay-gone', '这句的声音已经没了', '只留着最近 20 句念过的声音，重开程序后也没了；字还在。');
+      overlay.say({ text: kept.text, audio: kept.bytes, ms: (kept.durationMs > 0 ? kept.durationMs : 6000) + 1000, hidden: true });
+      extra = { replayed: body.id };
+    } else if (action === 'clear-said') {
+      store = { ...store, lines: [] };
+      lastComment = null;
+      voices.clear();
       persist();
     } else {
-      throw codedError('osu.action-unknown', `不认识的操作：${action || '（空）'}`, '支持 test / counter-sync / clear-plays。');
+      throw codedError('osu.action-unknown', `不认识的操作：${action || '（空）'}`, '支持 test / counter-sync / clear-plays / replay / clear-said。');
     }
     return { ...status(), ...extra };
   }

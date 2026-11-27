@@ -57,6 +57,8 @@ const event = (kind, extra = {}) => ({
   assert.equal(watch.describeEvent({ kind: 'unknown', map: {} }), '');
   // 他 / 她 / TA：玩家的称呼在设置里改。
   assert.ok(watch.describeEvent(event('fail'), { pronoun: '她' }).startsWith('她打《SONG_TITLE》'));
+  // 自己写的称呼（2026-11-27：「可以叫我大狗」）
+  assert.ok(watch.describeEvent(event('fail'), { pronoun: '大狗' }).startsWith('大狗打《SONG_TITLE》'));
   assert.ok(watch.describeEvent(event('finish', { multi: true, place: { rank: 2, players: 8 } }), { pronoun: 'TA' }).includes('TA排第 2'));
   // 滑条断要说清楚；全连没了要说出来（用户：「我 sliderbreak 之后她没反应」）。
   const text = watch.describeEvent({ kind: 'combo-break', map: { title: 'T', version: '', stars: 5.58, maxCombo: 732 }, mods: '', progress: 0.4, lostCombo: 80, sliderBreak: true, fcLost: true, acc: 99.1, miss: 0 });
@@ -293,6 +295,54 @@ function harness({ config = {}, petVisible = true, withPet = true, counter = nul
   fs.rmSync(PLAYS, { force: true });
 }
 {
+  // 「她最近说的」（2026-11-27：「有的时候说怪话我没听清」）：每句存下来，带着当时的成绩；念过的能再听一遍；重开程序字还在、声音没了
+  fs.rmSync(PLAYS, { force: true });
+  const { state, calls, service } = harness({ config: { voice: true } });
+  const map = { title: 'SONG_TITLE', version: 'Insane', stars: 4.83, maxCombo: 800 };
+  state.reply = '「啊 412 断了」';
+  await service.handleEvent(event('combo-break', { at: state.clock, map, lostCombo: 412, fcLost: true, timeMs: 102_400, progress: 0.63, n100: 3, n50: 0, miss: 1, combo: 0, peakCombo: 412, pp: 200 }));
+  let said = service.status().said;
+  assert.equal(said.length, 1);
+  assert.equal(said[0].text, '啊 412 combo 断了');
+  assert.equal(said[0].raw, '「啊 412 断了」', '整理过的带模型原话');
+  assert.deepEqual([said[0].kind, said[0].voiced, said[0].canReplay, said[0].map, said[0].detail], ['combo-break', true, true, 'SONG_TITLE [Insane] +HD', '断了 412 combo，FC 没了']);
+  assert.ok(said[0].stats.startsWith('谱面 1:42（63%）｜97.42%｜连击 0（最高 412 / 800）'), said[0].stats);
+  // 「试一句」也算一句，标成试一句
+  state.reply = 'TEST_LINE';
+  await service.act({ action: 'test' });
+  said = service.status().said;
+  assert.deepEqual([said[0].text, said[0].test, said[0].detail, said[0].map], ['TEST_LINE', true, '用一把假成绩试的', ''], '新的在前');
+  // 再听一遍：只出声（字幕窗口藏着放），不调模型、不算句数
+  const before = { complete: calls.complete.length, today: service.status().today.said, shown: calls.subtitles.length };
+  await service.act({ action: 'replay', id: said[1].id });
+  assert.equal(calls.complete.length, before.complete);
+  assert.equal(service.status().today.said, before.today);
+  const replayed = calls.subtitles.at(-1);
+  assert.equal(calls.subtitles.length, before.shown + 1);
+  assert.deepEqual([replayed.text, replayed.hidden, String(replayed.audio)], ['啊 412 combo 断了', true, 'RIFF_FAKE_WAV']);
+  await assert.rejects(service.act({ action: 'replay', id: 'nope' }), (error) => error.code === 'osu.replay-gone');
+  // 清空成绩不动这个列表
+  await service.act({ action: 'clear-plays' });
+  assert.equal(service.status().said.length, 2);
+  // 重开程序：字还在（存在 plays.json 里），声音没了
+  const restarted = harness({ config: { voice: true } }).service.status();
+  const again = restarted.said;
+  assert.deepEqual(again.map((item) => [item.text, item.canReplay]), [['TEST_LINE', false], ['啊 412 combo 断了', false]]);
+  // 总览气泡接着显示存下来的最后一句（复核发现：原来重开后气泡是空的）
+  assert.deepEqual([restarted.lastComment?.text, restarted.lastComment?.test], ['TEST_LINE', true]);
+  // 只留最近 20 句的声音
+  for (let i = 0; i < 22; i += 1) { state.clock += 1000; state.reply = `L${i}`; await service.act({ action: 'test' }); }
+  said = service.status().said;
+  assert.equal(said.filter((item) => item.canReplay).length, 20);
+  assert.equal(said.find((item) => item.text === 'L0').canReplay, false);
+  // 清空
+  await service.act({ action: 'clear-said' });
+  assert.equal(service.status().said.length, 0);
+  assert.equal(service.status().lastComment, null, '气泡也清掉');
+  assert.equal(harness().service.status().said.length, 0, '清空也存下来了');
+  fs.rmSync(PLAYS, { force: true });
+}
+{
   // 点「试一句」的时候正好打完一把：结束的那件事排着，试完马上接着说（复核发现：原来要等到下一件事才说）
   fs.rmSync(PLAYS, { force: true });
   const { state, calls, service } = harness();
@@ -516,7 +566,9 @@ function harness({ config = {}, petVisible = true, withPet = true, counter = nul
       const saidBefore = h2.service.status().today.said;
       assert.deepEqual(await h2.service.handleEvent(event('finish', { at: h2.state.clock })), { said: false, reason: 'osu.counter-write' });
       const st = h2.service.status();
-      assert.deepEqual([st.lastError.code, st.today.said, st.lastComment], ['osu.counter-write', saidBefore, null]);
+      // 没说成的那句不当「上一句」（气泡里可能是 plays.json 里存着的更早那句：重开后接着显示）
+      assert.deepEqual([st.lastError.code, st.today.said, st.lastComment?.text === 'LOST_LINE'], ['osu.counter-write', saidBefore, false]);
+      assert.ok(!st.said.some((item) => item.text === 'LOST_LINE'), '也不进「她最近说的」');
       // 桌面角色显示着时 OBS 写失败不影响这一句（桌面上出了）。
       const h3 = harness({ config: { output: 'bubble' }, petVisible: true, counter: { status: () => ({ enabled: true, installed: true, dir: 'D:/x', lastError: null }), say: () => false } });
       assert.equal((await h3.service.handleEvent(event('finish', { at: h3.state.clock }))).said, true);

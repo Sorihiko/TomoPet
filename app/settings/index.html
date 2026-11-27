@@ -60,6 +60,7 @@
         <div class="bubble-say" id="last-bubble">
           <div class="bubble-meta" id="st-last-meta">上一句</div>
           <div class="bubble-text" id="st-last">…</div>
+          <a href="#said" class="bubble-more" id="said-more">她最近说的 ›</a>
         </div>
         <div class="row">
           <button class="primary" id="btn-test" data-call="watch.test">让她说一句试试</button>
@@ -105,10 +106,29 @@
         <ul id="plays-mini" class="plays-mini"></ul>
       </section>
       <section class="card">
-        <h2>最近没说的 <span class="sub">为什么那一下她没反应</span></h2>
+        <h2>最近没说的 <span class="sub">为什么那一下她没反应</span> <a href="#said" class="more">全部</a></h2>
         <ul id="st-skipped" class="timeline"></ul>
       </section>
     </div>
+  </section>
+
+  <!-- ── 她最近说的（总览的二级页，2026-11-27：「最近说的想要一个展开的二级页面，有的时候说怪话我没听清」）──
+       不在左边的页签里：从总览的气泡「她最近说的 ›」、「最近没说的」的「全部」进来，左上角回总览。 -->
+  <section class="page sub-page" data-page="said" id="said" hidden>
+    <header class="page-head">
+      <a href="#overview" class="back">‹ 总览</a>
+      <h1>她最近说的</h1>
+      <p>最近 100 句，新的在上面；每句下面是她说这句时你打成什么样。念过的最近 20 句可以再听一遍（重开程序后只剩字）。</p>
+    </header>
+    <section class="card">
+      <h2>说了的 <span class="sub" id="said-count"></span></h2>
+      <ul id="said-list" class="said-list"></ul>
+      <div class="row"><button class="danger" data-call="said.clear" data-confirm="清空「她最近说的」？（成绩和小结不受影响）">清空</button></div>
+    </section>
+    <section class="card">
+      <h2>没说的 <span class="sub">最近 12 件，为什么那一下她没反应</span></h2>
+      <ul id="said-skipped" class="timeline"></ul>
+    </section>
   </section>
 
   <!-- ── 角色 ─────────────────────────────────────────────────────────── -->
@@ -233,7 +253,10 @@
         <label class="stack">她叫什么<input type="text" maxlength="40" data-cfg="persona.name"></label>
         <label class="stack">她怎么称呼你<input type="text" maxlength="40" data-cfg="persona.ownerName"></label>
         <label class="stack">提到你时用
-          <select data-cfg="persona.ownerPronoun"><option>他</option><option>她</option><option>TA</option></select>
+          <span class="pronoun-pick">
+            <select id="pronoun-pick" aria-label="提到你时用"><option>他</option><option>她</option><option>TA</option><option value="custom">自定义…</option></select>
+            <input type="text" maxlength="10" id="pronoun-custom" data-cfg="persona.ownerPronoun" placeholder="比如：大狗、你的名字" hidden>
+          </span>
         </label>
       </div>
     </section>

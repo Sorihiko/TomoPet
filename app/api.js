@@ -77,6 +77,9 @@ export function createApi({ configStore, service, llm, tts, overlay, pet, skins,
     'watch.test': async () => { const result = await service.act({ action: 'test' }); return { ...state(), said: result.said }; },
     'counter.sync': async () => { const result = await service.act({ action: 'counter-sync' }); return { ...state(), counterSynced: result.counterSynced }; },
     'plays.clear': async () => { await service.act({ action: 'clear-plays' }); return state(); },
+    // 「她最近说的」：再听一遍那句的声音；清空这个列表
+    'said.replay': async ({ id } = {}) => { await service.act({ action: 'replay', id: String(id ?? '').slice(0, 40) }); return state(); },
+    'said.clear': async () => { await service.act({ action: 'clear-said' }); return state(); },
 
     // 模型「测试」：真的发一次请求，看 Key、地址、模型名对不对。
     'llm.test': async () => {

@@ -64,11 +64,39 @@
       else if (input.tagName === 'SELECT') { if ([...input.options].some((option) => option.value === String(value))) input.value = String(value); }
       else input.value = value ?? '';
     }
+    syncPronoun(config.persona.ownerPronoun);
     for (const input of $$('[data-secret]')) {
       if (input === document.activeElement || input.value) continue;
       const has = { 'llm.apiKey': config.llm.hasApiKey, 'tts.accessKey': config.tts.hasAccessKey, 'tts.breezeKey': config.tts.hasBreezeKey, 'osuApi.clientSecret': config.osuApi && config.osuApi.hasClientSecret }[input.dataset.secret] === true;
       input.placeholder = has ? '已填（不显示）；要换就直接输入新的' : '还没填';
     }
+  }
+
+  // 「提到你时用」：他 / 她 / TA 直接选；「自定义…」出一个输入框自己写（2026-11-27：「可以叫我大狗」）。
+  // 真正存的是那个输入框（data-cfg），下拉框只是帮着填。
+  const PRONOUNS = ['他', '她', 'TA'];
+  function syncPronoun(value) {
+    const pick = $('#pronoun-pick');
+    const custom = $('#pronoun-custom');
+    if (!pick || !custom || custom === document.activeElement || pick.dataset.editing === '1') return;
+    const preset = PRONOUNS.includes(value);
+    pick.value = preset ? value : 'custom';
+    custom.hidden = preset;
+  }
+  async function savePronounPick(pick) {
+    const custom = $('#pronoun-custom');
+    if (pick.value === 'custom') {
+      // 先不存：等输入框里写好了、离开输入框时再存
+      pick.dataset.editing = '1';
+      custom.hidden = false;
+      if (PRONOUNS.includes(custom.value)) custom.value = '';
+      custom.focus();
+      return;
+    }
+    delete pick.dataset.editing;
+    custom.hidden = true;
+    custom.value = pick.value;
+    await saveField(custom);
   }
 
   async function saveField(input) {
@@ -96,6 +124,12 @@
       });
       return;
     }
+    if (input.id === 'pronoun-pick') { savePronounPick(input); return; }
+    if (input.id === 'pronoun-custom') {
+      delete $('#pronoun-pick').dataset.editing;
+      // 写空了：不存空的（会变回「他」），回到原来的
+      if (!input.value.trim()) { input.blur(); fillInputs(); return; }
+    }
     if (input.dataset && input.dataset.cfg) saveField(input);
     else if (input.dataset && input.dataset.secret) {
       const text = input.value.trim();
@@ -106,6 +140,15 @@
         fillInputs();
       });
     }
+  });
+  // 选了「自定义…」但什么都没写就点走了：回到原来存着的那个
+  document.addEventListener('focusout', (event) => {
+    if (event.target.id !== 'pronoun-custom') return;
+    setTimeout(() => {
+      if (document.activeElement === event.target) return;
+      const pick = $('#pronoun-pick');
+      if (pick && pick.dataset.editing === '1' && !event.target.value.trim()) { delete pick.dataset.editing; if (latest) fillInputs(); }
+    }, 0);
   });
   // 滑块拖过的那段上色：样式里的 --pct 按当前值算（CSS 拿不到 range 的值）。
   const paintRange = (input) => {
@@ -123,10 +166,13 @@
   const PAGES = ['overview', 'pet', 'watch', 'persona', 'llm', 'tts', 'obs', 'advanced']; // 2026-11-22 用户：角色挪到总览后面
   // 「下一步」那一条说的是哪一块（core/next-step.js 的 section）→ 在哪一页。
   const PAGE_OF_SECTION = { status: 'overview', watch: 'watch', persona: 'persona', llm: 'llm', tts: 'tts', pet: 'pet', obs: 'obs', about: 'advanced', rulers: 'advanced', plays: 'advanced' };
+  // 二级页（不在左边的页签里）→ 左边亮哪一项
+  const SUB_PAGES = { said: 'overview' };
   function showPage(name) {
-    const page = PAGES.includes(name) ? name : 'overview';
+    const page = PAGES.includes(name) || SUB_PAGES[name] ? name : 'overview';
+    const navPage = SUB_PAGES[page] || page;
     for (const section of $$('main > .page')) section.hidden = section.dataset.page !== page;
-    for (const link of $$('#pages-nav a')) link.classList.toggle('active', link.dataset.page === page);
+    for (const link of $$('#pages-nav a')) link.classList.toggle('active', link.dataset.page === navPage);
     $('main').scrollTop = 0;
   }
   function goto(section) {
@@ -152,6 +198,7 @@
     'watch.test': (r) => ['她说了', r.said],
     'counter.sync': (r) => ['已装进 tosu', r.counterSynced && r.counterSynced.dir],
     'plays.clear': () => ['已清空', ''],
+    'said.clear': () => ['已清空', ''],
     'llm.test': (r) => ['模型通了', `${r.model} 回了「${r.text}」，用了 ${(r.ms / 1000).toFixed(1)} 秒、${r.tokens} 个 token`],
     'tts.test': (r) => ['正在念', `${(r.durationMs / 1000).toFixed(1)} 秒${r.cached ? '（用的缓存）' : ''}：${r.text}`],
     'osuapi.test': () => ['osu! 官网通了', '下次选图时她就会去看这张图的玩家标签。'],
@@ -176,6 +223,10 @@
       } finally {
         button.disabled = false;
       }
+    } else if (data.replay) {
+      // 「她最近说的」：再听一遍那句
+      button.disabled = true;
+      try { const result = await call('said.replay', { id: data.replay }); if (result.ok) toast('正在放'); } finally { button.disabled = false; }
     } else if (data.copy) {
       const result = await call('clipboard.copy', { text: $(`#${data.copy}`).textContent });
       if (result.ok) toast('已复制');
@@ -422,7 +473,7 @@
     // 总览：她刚说的那句（对话气泡）
     const last = status.lastComment;
     $('#last-bubble').classList.toggle('empty', !last);
-    $('#st-last-meta').textContent = last ? `${clock(last.at)} · ${KIND[last.kind] || last.kind}${last.voiced ? ' · 念了' : ''}` : '上一句';
+    $('#st-last-meta').textContent = last ? `${clock(last.at)} · ${last.test ? '试一句' : KIND[last.kind] || last.kind}${last.voiced ? ' · 念了' : ''}` : '上一句';
     $('#st-last').textContent = last ? last.text : '还没说过话。打一把，或者点下面「让她说一句试试」。';
 
     // 总览：四块数据卡
@@ -444,12 +495,15 @@
       ? [playing.map.stars ? `${playing.map.stars}★` : '', playing.mods ? `+${playing.mods}` : '', `${playing.acc}%`, `${playing.combo} 连`, `miss ${playing.miss}`, playing.retries ? `重开 ${playing.retries} 次` : ''].filter(Boolean).join(' · ')
       : (tosu.connected ? '进一张图就会显示' : '先打开 tosu 和 osu!');
 
-    // 总览：最近没说的（时间线）
-    setChildren($('#st-skipped'), ...(status.skipped.length ? status.skipped.slice(0, 5).map((item) => el('li', {},
+    // 总览：最近没说的（时间线）；二级页「她最近说的」里是全部 12 件
+    const skippedItem = (item) => el('li', {},
       el('div', { class: 'tl-head' },
         el('span', { class: 'tl-time', text: clock(item.at) }),
         el('span', { class: 'tl-kind', text: `${item.sliderBreak ? '滑条断' : KIND[item.kind] || item.kind}${item.lostCombo ? ` · ${item.lostCombo} 连${item.maxCombo ? ` / ${item.maxCombo}` : ''}` : ''}` })),
-      el('div', { class: 'tl-why', text: item.why }))) : [el('li', { class: 'empty', text: '没有。该说的她都说了。' })]));
+      el('div', { class: 'tl-why', text: item.why }));
+    const noSkips = () => [el('li', { class: 'empty', text: '没有。该说的她都说了。' })];
+    setChildren($('#st-skipped'), ...(status.skipped.length ? status.skipped.slice(0, 5).map(skippedItem) : noSkips()));
+    renderSaid(status, skippedItem, noSkips);
 
     // 总览：最近几把（前 5 把）
     setChildren($('#plays-mini'), ...(status.plays.length ? status.plays.slice(0, 5).map((play) => {
@@ -502,6 +556,34 @@
     )) : [el('tr', {}, el('td', { colspan: '7', text: '还没有成绩。' }))]));
 
     $('#about-data').textContent = app.dataDir;
+  }
+
+  // 二级页「她最近说的」：每句一行（时间、什么时候说的、念没念、再听一遍），下面是那时打成什么样。
+  // 内容没变就不重画（每 1.5 秒刷新一次，重画会打断正在点的「再听一遍」）
+  let saidKey = '';
+  function renderSaid(status, skippedItem, noSkips) {
+    const said = Array.isArray(status.said) ? status.said : [];
+    $('#said-more').hidden = said.length === 0;
+    // 日期也算进去：过了零点，昨天的那些要补上日期
+    const today = new Date().toDateString();
+    const key = JSON.stringify([today, said.map((item) => `${item.id}:${item.canReplay ? 1 : 0}`), status.skipped.map((item) => item.at)]);
+    if (key === saidKey) return;
+    saidKey = key;
+    const when = (at) => (new Date(at).toDateString() === today ? clock(at) : new Date(at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }));
+    $('#said-count').textContent = said.length ? `${said.length} 句` : '';
+    setChildren($('#said-list'), ...(said.length ? said.map((item) => {
+      const context = [item.map, item.detail, ...String(item.stats || '').split('｜')].filter(Boolean).join(' · ');
+      return el('li', {},
+        el('div', { class: 'said-head' },
+          el('span', { class: 'tl-time', text: when(item.at) }),
+          el('span', { class: 'said-kind', text: item.test ? '试一句' : KIND[item.kind] || item.kind }),
+          item.voiced ? el('span', { class: 'said-tag', text: '念了' }) : null,
+          item.canReplay ? el('button', { class: 'small said-replay', 'data-replay': item.id, text: '再听一遍' }) : null),
+        el('div', { class: 'said-text', text: item.text }),
+        item.raw ? el('div', { class: 'said-raw', text: `模型原话：${item.raw}` }) : null,
+        context ? el('div', { class: 'said-ctx', text: context }) : null);
+    }) : [el('li', { class: 'empty', text: '还没说过话。打一把，或者回总览点「让她说一句试试」。' })]));
+    setChildren($('#said-skipped'), ...(status.skipped.length ? status.skipped.map(skippedItem) : noSkips()));
   }
 
   async function refresh() {
