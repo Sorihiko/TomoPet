@@ -55,6 +55,9 @@ const all = (re) => [...html.matchAll(re)].map((m) => m[1]);
   // 「提到你时用」能自己写（2026-11-27：「可以叫我大狗」）：存的是输入框，下拉框帮着填
   assert.ok(/<select id="pronoun-pick"[^>]*>.*<option value="custom">自定义…<\/option><\/select>/.test(html), '下拉框有「自定义…」');
   assert.ok(/<input type="text" maxlength="10" id="pronoun-custom" data-cfg="persona.ownerPronoun"/.test(html), '自定义的输入框存 persona.ownerPronoun');
+  // OBS 页：先开 tosu 再开 OBS，出不来时怎么刷新（2026-11-27：OBS 先开时页面加载失败、不会重试，朋友那边角色不见了）
+  const order = /<p class="note obs-order" id="obs-order">([\s\S]*?)<\/p>/.exec(html);
+  assert.ok(order && order[1].includes('先开 tosu，再开 OBS') && order[1].includes('刷新当前页面的缓存'), 'OBS 页有「先开 tosu 再开 OBS」和怎么刷新');
 }
 
 // ── 离屏自检和外面用到的元素都在；样式是深色 ──────────────────────────────────

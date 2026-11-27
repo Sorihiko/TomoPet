@@ -467,3 +467,7 @@ tbody tr:hover td { background: rgba(237, 237, 237, .02); }
 /* 气泡是空的（深色底）时链接也要看得清（复核发现：灰字在深底上几乎看不见） */
 .bubble-say.empty .bubble-more { color: var(--ink-3); }
 .bubble-say.empty .bubble-more:hover { color: var(--ink); }
+
+/* OBS 页：「先开 tosu 再开 OBS」那条提示（2026-11-27） */
+.obs-order { margin-top: 12px; padding: 8px 12px; border-left: 2px solid var(--accent); background: rgba(237, 237, 237, .03); border-radius: 0 6px 6px 0; }
+.obs-order b { color: var(--ink); font-weight: 500; }
