@@ -49,6 +49,12 @@ if (process.env.OSU_PET_HOME) app.setPath('userData', path.join(path.resolve(pro
 else app.setPath('userData', path.join(app.getPath('appData'), DATA_FOLDER));
 // 字幕窗口要自己出声：没有人会去点它。
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+// 离屏自检时关掉 Windows 的「窗口被挡住就当藏起来」：自检的窗口被桌面上别的窗口盖住时，页面变成 hidden，
+// 不认鼠标悬停（角色卡探出框那项时过时不过，2026-11-27 查到 visibilityState 是 hidden）。只在自检时关，平时照常省电
+if (process.env.OSU_PET_SMOKE) {
+  app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+  app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+}
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();

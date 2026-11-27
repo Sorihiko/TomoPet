@@ -114,15 +114,30 @@ export async function runSmoke({ outDir, app, BrowserWindow, openSettings, pet, 
     pages.charSelect.shot = await shot(win, 'settings-pet-stage');
     // 鼠标真的放到第二张角色卡上：她往上探出框（2026-11-22 用户：「把鼠标放在角色上面的时候角色身体能出框」）
     const cs0 = pages.charSelect;
-    const cardBox = await win.webContents.executeJavaScript(`(() => { const c = document.querySelectorAll('.skin-card')[1]; if (!c) return null; c.scrollIntoView({ block: 'center' }); const r = c.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), top: r.top }; })()`);
+    const measureCard = `(() => { const c = document.querySelectorAll('.skin-card')[1]; if (!c) return null; c.scrollIntoView({ block: 'center', behavior: 'instant' }); const r = c.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), top: r.top }; })()`;
+    const cardBox = await win.webContents.executeJavaScript(measureCard);
     if (cardBox) {
       await wait(300);
-      // 合成的鼠标移动偶尔被吞掉（离屏自检时 hover 没触发）：先移到旁边、再移上去，各等一下
-      win.webContents.sendInputEvent({ type: 'mouseMove', x: cardBox.x - 3, y: cardBox.y - 3 });
-      await wait(150);
-      win.webContents.sendInputEvent({ type: 'mouseMove', x: cardBox.x, y: cardBox.y });
-      await wait(600);
+      // 合成的鼠标移动在离屏窗口里时不时被吞掉，hover 没触发（2026-11-27 连跑三次挂了两次）：
+      // 每次重新量卡片的位置、先移到旁边再移上去，看真的 :hover 了才往下比，最多试 3 次
+      let hoverTries = 0;
+      for (let box = cardBox; box && hoverTries < 3; box = await win.webContents.executeJavaScript(measureCard)) {
+        hoverTries += 1;
+        win.webContents.sendInputEvent({ type: 'mouseMove', x: 5, y: 5 });
+        await wait(100);
+        win.webContents.sendInputEvent({ type: 'mouseMove', x: box.x - 3, y: box.y - 3 });
+        await wait(150);
+        win.webContents.sendInputEvent({ type: 'mouseMove', x: box.x, y: box.y });
+        await wait(250);
+        if (await win.webContents.executeJavaScript(`document.querySelectorAll('.skin-card')[1].matches(':hover')`)) break;
+      }
+      await wait(450); // 探出框有个过渡动画，等它走完再量
       pages.charSelect.hoverOut = await win.webContents.executeJavaScript(`(() => { const c = document.querySelectorAll('.skin-card')[1]; const img = c.querySelector('.skin-art img'); return { hovered: c.matches(':hover'), cardTop: c.getBoundingClientRect().top, imgTop: img ? img.getBoundingClientRect().top : null, stage: document.getElementById('stage-name').textContent, selected: c.classList.contains('selected') }; })()`);
+      pages.charSelect.hoverOut.tries = hoverTries;
+      // 没 hover 上时记下鼠标那个位置上到底是谁（挡住卡片的东西）
+      const lastBox = await win.webContents.executeJavaScript(measureCard);
+      pages.charSelect.hoverOut.atPoint = await win.webContents.executeJavaScript(`(() => { const n = document.elementFromPoint(${lastBox ? lastBox.x : 0}, ${lastBox ? lastBox.y : 0}); return n ? [n.tagName, n.id, String(n.className), (n.closest('[id]') || {}).id].join('|') : null; })()`);
+      pages.charSelect.hoverOut.focus = await win.webContents.executeJavaScript(`({ hasFocus: document.hasFocus(), visibility: document.visibilityState, toasts: [...document.querySelectorAll('.toast')].map((t) => t.textContent.slice(0, 40)) })`);
       pages.charSelect.hoverShot = await shot(win, 'settings-pet-card-hover');
       win.webContents.sendInputEvent({ type: 'mouseMove', x: 5, y: 5 });
       const h = pages.charSelect.hoverOut;
@@ -208,8 +223,19 @@ export async function runSmoke({ outDir, app, BrowserWindow, openSettings, pet, 
     pet.hudCurve(fakeCurve);
     pet.hud({ on: true, pp: 496, fc: 612, n100: 7, n50: 0, miss: 1, progress: 0.62 });
     await wait(600);
-    const ring = await win.webContents.executeJavaScript(`(() => { const r = window.__ring; if (!r) return null; const g = r.geometry(); return { on: r.current().on, geo: g, curve: (r.curve() || []).length, bands: document.querySelectorAll('svg line').length, ringPaths: document.querySelectorAll('svg path:not([id])').length, footroom: window.__tomopetFootroom, h: innerHeight, w: innerWidth, label: (document.querySelector('.tpr') || {}).textContent || '' }; })()`);
+    // 难度曲线有两种画法（设置 pet.hudCurveStyle）：柱子 = 一根根 <line>；墙 = <polygon> 墙面 + <polyline> 顶边。
+    // 原来只数 <line>，默认改成墙以后一直报「环不对」（2026-11-27 修）：按当前画法数，再换另一种画法看一遍。
+    const drawn = `(() => { const r = window.__ring; return { style: r.curveStyle(), bars: document.querySelectorAll('svg line').length, walls: document.querySelectorAll('svg polygon').length, wallTops: document.querySelectorAll('svg polyline').length, ringPaths: document.querySelectorAll('svg path:not([id])').length }; })()`;
+    const curveOk = (x) => x && (x.style === 'wall' ? x.walls >= 2 && x.wallTops >= 2 && x.bars === 0 : x.bars >= 30 && x.walls === 0 && x.wallTops === 0) && x.ringPaths === 0;
+    const ring = await win.webContents.executeJavaScript(`(() => { const r = window.__ring; if (!r) return null; const g = r.geometry(); return { on: r.current().on, geo: g, curve: (r.curve() || []).length, drawn: ${drawn}, footroom: window.__tomopetFootroom, h: innerHeight, w: innerWidth, label: (document.querySelector('.tpr') || {}).textContent || '' }; })()`);
     const ringShot = await shot(win, 'pet-hud');
+    const otherStyle = ring && ring.drawn.style === 'wall' ? 'bars' : 'wall';
+    await win.webContents.executeJavaScript(`window.__ring.setCurveStyle('${otherStyle}'); 0`);
+    await wait(300);
+    const other = { ...(await win.webContents.executeJavaScript(drawn)), shot: await shot(win, `pet-hud-${otherStyle}`) };
+    await win.webContents.executeJavaScript(`window.__ring.setCurveStyle('${ring ? ring.drawn.style : 'wall'}'); 0`);
+    await wait(300);
+    const restored = await win.webContents.executeJavaScript(drawn);
     // 放大到 1.3 倍：留白跟着变大，字不压环、不出窗口（复核发现固定 46 像素时会）
     const fits = `(() => { const g = window.__ring.geometry(); const label = document.querySelector('.tpr'); const r = label.getBoundingClientRect(); return { ringBottom: g.cy + g.ry, labelTop: r.top, labelBottom: r.bottom, h: innerHeight, footroom: window.__tomopetFootroom }; })()`;
     const smallFit = await win.webContents.executeJavaScript(fits);
@@ -229,8 +255,10 @@ export async function runSmoke({ outDir, app, BrowserWindow, openSettings, pet, 
     pet.hud({ on: false });
     await wait(400);
     const ringOff = await win.webContents.executeJavaScript('window.__ring ? window.__ring.current().on : null');
-    if (!ring || !ring.on || !ring.geo || ring.geo.cy > ring.h || ring.geo.cy < ring.h * 0.5 || !/^496pp.*ifFC612/.test(ring.label.replace(/\s/g, '')) || ringOff !== false || ring.curve !== 120 || ring.bands < 30 || ring.ringPaths !== 0) throw new Error(`脚下的 pp 环不对：${JSON.stringify({ ring, ringOff })}`);
-    return { ...before, status: pet.status(), spoke, bubble, idle, talking, mouth: { has: Boolean(mouth[0] && mouth[0].has), files: mouthFiles, samples: mouth }, swap: swapMin, zoom, ring: { ...ring, shot: ringShot, offAfter: ringOff, smallFit, bigFit, bigShot } };
+    if (!ring || !ring.on || !ring.geo || ring.geo.cy > ring.h || ring.geo.cy < ring.h * 0.5 || !/^496pp.*ifFC612/.test(ring.label.replace(/\s/g, '')) || ringOff !== false || ring.curve !== 120) throw new Error(`脚下的 pp 环不对：${JSON.stringify({ ring, ringOff })}`);
+    // 画了曲线就不画灰环（ringPaths 是 0）；两种画法都画得出来，换回去以后和原来一样
+    if (!curveOk(ring.drawn) || !curveOk(other) || other.style !== otherStyle || JSON.stringify(restored) !== JSON.stringify(ring.drawn)) throw new Error(`脚下的难度曲线没画对：${JSON.stringify({ first: ring.drawn, other, restored })}`);
+    return { ...before, status: pet.status(), spoke, bubble, idle, talking, mouth: { has: Boolean(mouth[0] && mouth[0].has), files: mouthFiles, samples: mouth }, swap: swapMin, zoom, ring: { ...ring, shot: ringShot, other, offAfter: ringOff, smallFit, bigFit, bigShot } };
   });
 
   await step('overlay', async () => {
